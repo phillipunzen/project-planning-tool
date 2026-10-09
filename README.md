@@ -10,6 +10,7 @@ Repository: [phillipunzen/project-planning-tool](https://github.com/phillipunzen
 - Aufgaben mit Beschreibung, Priorität (niedrig, mittel, hoch, dringend), Fälligkeit, Verantwortlichem und Labels.
 - Verschieben und Sortieren mit Maus, Touch-Griff oder Tastatur (Leertaste, Pfeile, Leertaste; Escape zum Abbrechen). Alternativ Status in den Aufgabendetails ändern.
 - Checklisten mit einzelnen Punkten und Fortschrittsanzeige.
+- Manueller Gesamtfortschritt pro Aufgabe mit fünf Buttons: 0 %, 25 %, 50 %, 75 % und 100 %. Anzeige auf Kanban-Karten und in der Liste; unabhängig von Statusspalte und Checkliste. Änderungen erscheinen im Board-Verlauf.
 - Dateianhänge bis 20 MB pro Datei. Downloads sind durch Projektmitgliedschaft geschützt und werden als Download ausgeliefert.
 - Kommentare als Statusupdates und chronologischer Änderungsverlauf pro Board.
 - Kanban-, Listenansicht, Suche, Prioritätsfilter und persönliche Aufgabenübersicht.
@@ -152,7 +153,7 @@ docker compose stop             # anhalten; Daten bleiben erhalten
 
 `GET /api/health` prüft auch die Datenbankverbindung. Die App besitzt einen Docker-Healthcheck, der die externe Datenbankverbindung mitprüft. Der optionale MariaDB-Container hat einen eigenen Healthcheck. Die App läuft als unprivilegierter `node`-Benutzer. Datei-Uploads werden auf ausgewählte Endungen begrenzt; ein Virenscanner ist in dieser Version nicht enthalten. Anhänge sollten daher wie andere intern geteilte Dateien behandelt werden.
 
-Die erste Schema-Version erstellt fehlende Tabellen additiv; ein vorhandenes `Cards`-Schema erhält bei Bedarf die Checklisten-Spalte. Es gibt kein automatisches `sync({alter:true})` oder Zurücksetzen von Nutzdaten. Für spätere Schemaänderungen sind versionierte Migrationen zu ergänzen.
+Die erste Schema-Version erstellt fehlende Tabellen additiv; ein vorhandenes `Cards`-Schema erhält bei Bedarf die Checklisten- und Fortschrittsspalten. Bestehende Karten starten mit 0 Prozent; bestehende Daten bleiben erhalten. Es gibt kein automatisches `sync({alter:true})` oder Zurücksetzen von Nutzdaten. Für spätere Schemaänderungen sind versionierte Migrationen zu ergänzen.
 
 ### Sicherung und Wiederherstellung
 

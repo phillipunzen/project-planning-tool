@@ -882,11 +882,13 @@ app.patch(
     res.json({ ok: true });
   }),
 );
+const cardProgress = z.number().int().min(0).max(100).multipleOf(25);
 const cardInput = z.object({
   title: z.string().trim().min(1).max(200),
   description: z.string().max(20000).default(""),
   columnId: uuid,
   priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
+  progress: cardProgress.default(0),
   dueDate: z.iso.date().nullable().default(null),
   assigneeId: uuid.nullable().default(null),
   labels: z.array(z.string().trim().min(1).max(30)).max(8).default([]),
@@ -951,7 +953,10 @@ app.patch(
   "/api/cards/:id",
   api(async (req, res) => {
     const input = cardInput
-      .extend({ version: z.number().int().nonnegative() })
+      .extend({
+        version: z.number().int().nonnegative(),
+        progress: cardProgress.optional(),
+      })
       .parse(req.body);
     await db.transaction(async (t) => {
       const initial = await Card.findByPk(req.params.id, { transaction: t });
@@ -981,11 +986,20 @@ app.patch(
         position = (Number.isFinite(max) ? max : -1) + 1;
       }
       const oldColumn = c.columnId;
+      const oldProgress = c.progress;
       await c.update(
         { ...input, position, version: c.version + 1 },
         { transaction: t },
       );
       await b.increment("revision", { transaction: t });
+      if (c.progress !== oldProgress)
+        await log(
+          req,
+          b,
+          `Fortschritt geändert: ${oldProgress} % → ${c.progress} %`,
+          c.title,
+          t,
+        );
       await log(
         req,
         b,

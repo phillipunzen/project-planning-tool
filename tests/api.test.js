@@ -6,7 +6,8 @@ process.env.ALLOWED_ORIGINS = "http://localhost:54734";
 process.env.DATABASE_NAME = "projektwerk_test";
 process.env.UPLOAD_DIR = "artifacts/test-uploads";
 const { app } = await import("../server/index.js");
-const { db, Setting, Invitation } = await import("../server/db.js");
+const { db, Setting, Invitation, Card, initializeDatabase } =
+  await import("../server/db.js");
 await db.sync({ force: true });
 await Setting.create({ key: "installation", value: "{}" });
 const server = app.listen(0, "127.0.0.1");
@@ -217,13 +218,37 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
     },
   );
   await t.test(
-    "cards persist priority, labels, due dates and checklist",
+    "existing cards receive zero progress without losing data during migration",
+    async () => {
+      const legacy = await Card.create({
+        title: "Bestehende Aufgabe",
+        description: "Details bleiben erhalten",
+        BoardId: board.id,
+        columnId: board.columns[0].id,
+        checklist: [
+          { id: crypto.randomUUID(), text: "Bestehender Punkt", done: true },
+        ],
+      });
+      // The fixture deliberately recreates the pre-upgrade schema, only in projektwerk_test.
+      await db.query("ALTER TABLE `Cards` DROP COLUMN `progress`");
+      await initializeDatabase();
+      await initializeDatabase();
+      const migrated = await Card.findByPk(legacy.id);
+      assert.equal(migrated.progress, 0);
+      assert.equal(migrated.description, legacy.description);
+      assert.deepEqual(migrated.checklist, legacy.checklist);
+      await migrated.destroy();
+    },
+  );
+  await t.test(
+    "cards persist priority, labels, due dates, checklist and progress",
     async () => {
       const r = await editor.call(`/boards/${board.id}/cards`, "POST", {
         title: "Implementierung",
         description: "Details",
         columnId: board.columns[0].id,
         priority: "high",
+        progress: 25,
         dueDate: "2026-11-01",
         assigneeId: editorUser.id,
         labels: ["Entwicklung"],
@@ -236,9 +261,83 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
       card = r.data;
       const loaded = (await viewer.call(`/boards/${board.id}`)).data;
       assert.equal(loaded.cards[0].priority, "high");
+      assert.equal(loaded.cards[0].progress, 25);
       assert.equal(loaded.cards[0].checklist.length, 2);
       assert.equal(loaded.cards[0].assignee.name, "Editor");
       board = loaded;
+    },
+  );
+  await t.test(
+    "progress validates boundaries, permissions and preserves omitted updates",
+    async () => {
+      for (const progress of [-1, 101, 12.5, 35, "50", null]) {
+        assert.equal(
+          (
+            await editor.call(`/boards/${board.id}/cards`, "POST", {
+              title: "Ungültig",
+              columnId: board.columns[0].id,
+              progress,
+            })
+          ).status,
+          400,
+        );
+        assert.equal(
+          (
+            await editor.call(`/cards/${card.id}`, "PATCH", {
+              ...card,
+              progress,
+            })
+          ).status,
+          400,
+        );
+      }
+      assert.equal(
+        (
+          await viewer.call(`/cards/${card.id}`, "PATCH", {
+            ...card,
+            progress: 100,
+          })
+        ).status,
+        403,
+      );
+      for (const progress of [0, 25, 50, 75, 100, 75]) {
+        assert.equal(
+          (
+            await editor.call(`/cards/${card.id}`, "PATCH", {
+              ...card,
+              progress,
+            })
+          ).status,
+          200,
+        );
+        board = (await viewer.call(`/boards/${board.id}`)).data;
+        card = board.cards.find((c) => c.id === card.id);
+        assert.equal(card.progress, progress);
+        assert.equal(card.checklist.filter((i) => i.done).length, 1);
+        assert.equal(card.columnId, board.columns[0].id);
+      }
+      const { progress, ...legacyUpdate } = card;
+      assert.equal(
+        (await editor.call(`/cards/${card.id}`, "PATCH", legacyUpdate)).status,
+        200,
+      );
+      board = (await viewer.call(`/boards/${board.id}`)).data;
+      card = board.cards.find((c) => c.id === card.id);
+      assert.equal(card.progress, 75);
+      const created = await editor.call(`/boards/${board.id}/cards`, "POST", {
+        title: "Standardfortschritt",
+        columnId: board.columns[0].id,
+      });
+      assert.equal(created.status, 201);
+      assert.equal(created.data.progress, 0);
+      await editor.call(`/cards/${created.data.id}`, "DELETE", {
+        version: created.data.version,
+      });
+      board = (await editor.call(`/boards/${board.id}`)).data;
+      const activity = (await editor.call(`/boards/${board.id}/activity`)).data;
+      assert.ok(
+        activity.some((a) => a.action === "Fortschritt geändert: 100 % → 75 %"),
+      );
     },
   );
   await t.test(

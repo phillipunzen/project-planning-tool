@@ -58,14 +58,12 @@ try {
   });
   console.log("PASS: Registrierung über weitergeleitete Vorschauadresse und Beispielboard");
   // Drag between columns with the desktop mouse.
-  const firstCard = page
-    .locator(".task-card")
-    .filter({
-      has: page.getByRole("button", {
-        name: "Projektziele festlegen",
-        exact: true,
-      }),
-    });
+  const firstCard = page.locator(".task-card").filter({
+    has: page.getByRole("button", {
+      name: "Projektziele festlegen",
+      exact: true,
+    }),
+  });
   const drag = await firstCard.locator(".drag-handle").boundingBox();
   const target = await page.locator(".kanban-column").nth(3).boundingBox();
   await page.mouse.move(drag.x + drag.width / 2, drag.y + drag.height / 2);
@@ -95,6 +93,10 @@ try {
     .fill("Eine gemeinsame Aufgabe mit Anhängen.");
   await page.getByLabel("Priorität", { exact: true }).selectOption("urgent");
   await page
+    .getByRole("group", { name: "Fortschritt" })
+    .getByRole("button", { name: "25 %", exact: true })
+    .click();
+  await page
     .getByLabel("Verantwortlich", { exact: true })
     .selectOption({ label: "Alex Beispiel" });
   await page.getByLabel("Fällig am").fill("2026-11-03");
@@ -109,6 +111,16 @@ try {
     .getByRole("button", { name: "Aufgabe erstellen", exact: true })
     .click();
   await expect(page.locator("dialog")).toHaveCount(0);
+  const progressCard = page.locator(".task-card").filter({
+    has: page.getByRole("button", {
+      name: "UI-Test mit Checkliste",
+      exact: true,
+    }),
+  });
+  await expect(progressCard.getByRole("progressbar")).toHaveAttribute(
+    "value",
+    "25",
+  );
   await page
     .getByRole("button", { name: "UI-Test mit Checkliste", exact: true })
     .click();
@@ -118,14 +130,36 @@ try {
   await expect(page.getByLabel("Priorität", { exact: true })).toHaveValue(
     "urgent",
   );
-  await page.getByRole("button", { name: /Anhänge/ }).click();
+  const progressButtons = page.getByRole("group", { name: "Fortschritt" });
+  await expect(
+    progressButtons.getByRole("button", { name: "25 %", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await progressButtons
+    .getByRole("button", { name: "75 %", exact: true })
+    .click();
   await page
-    .locator("input[type=file]")
-    .setInputFiles({
-      name: "projektplan.txt",
-      mimeType: "text/plain",
-      buffer: Buffer.from("Gemeinsamer Plan"),
-    });
+    .getByRole("button", { name: "Änderungen speichern", exact: true })
+    .click();
+  await expect(page.locator("dialog")).toHaveCount(0);
+  await page.reload();
+  await expect(progressCard.getByRole("progressbar")).toHaveAttribute(
+    "value",
+    "75",
+  );
+  await page
+    .getByRole("button", { name: "UI-Test mit Checkliste", exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole("group", { name: "Fortschritt" })
+      .getByRole("button", { name: "75 %", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: /Anhänge/ }).click();
+  await page.locator("input[type=file]").setInputFiles({
+    name: "projektplan.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Gemeinsamer Plan"),
+  });
   await expect(
     page.getByRole("link", { name: "projektplan.txt" }),
   ).toBeVisible();
@@ -186,6 +220,11 @@ try {
   await expect(
     other.getByRole("checkbox", { name: "Erster Schritt" }),
   ).toBeChecked();
+  await expect(
+    other
+      .getByRole("group", { name: "Fortschritt" })
+      .getByRole("button", { name: "75 %", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await other.getByRole("button", { name: /Kommentare/ }).click();
   await expect(
     other.getByText("Status: bereit zur Prüfung.", { exact: true }),
@@ -194,6 +233,12 @@ try {
   console.log("PASS: Einladung und gemeinsame Daten für zweiten Benutzer");
   await page.getByRole("button", { name: "Liste", exact: true }).click();
   await expect(page.locator(".task-table tbody tr")).toHaveCount(7);
+  await expect(
+    page
+      .getByRole("row")
+      .filter({ hasText: "UI-Test mit Checkliste" })
+      .getByRole("cell", { name: "75 %", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Aktivität", exact: true }).click();
   await expect(
     page.getByText("datei angehängt", { exact: true }),
@@ -309,6 +354,40 @@ try {
     .click();
   await expect(mobile.getByLabel("Titel", { exact: true })).toBeVisible();
   await mobile.getByRole("button", { name: "Schließen", exact: true }).click();
+  await mobile
+    .locator(".kanban-column")
+    .getByRole("button", { name: "UI-Test mit Checkliste", exact: true })
+    .click();
+  await expect(
+    mobile
+      .getByRole("group", { name: "Fortschritt" })
+      .getByRole("button", { name: "75 %", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await mobile
+    .getByRole("group", { name: "Fortschritt" })
+    .getByRole("button", { name: "100 %", exact: true })
+    .tap();
+  await mobile.screenshot({
+    path: "artifacts/card-progress-mobile.png",
+    fullPage: true,
+  });
+  await mobile
+    .getByRole("button", { name: "Änderungen speichern", exact: true })
+    .click();
+  await expect(mobile.locator("dialog")).toHaveCount(0);
+  await mobile
+    .locator(".kanban-column")
+    .getByRole("button", { name: "UI-Test mit Checkliste", exact: true })
+    .click();
+  await expect(
+    mobile
+      .getByRole("group", { name: "Fortschritt" })
+      .getByRole("button", { name: "100 %", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await mobile.getByRole("button", { name: "Schließen", exact: true }).click();
+  console.log(
+    "PASS: Prozentfortschritt gespeichert, geteilt und auf Desktop und Handy bearbeitet",
+  );
   await mobile.setViewportSize({ width: 768, height: 1024 });
   await mobile.screenshot({
     path: "artifacts/board-tablet.png",
@@ -320,7 +399,7 @@ try {
   console.log("PASS: Desktop, Handy und Tablet ohne Browser-Laufzeitfehler");
 } finally {
   await browser.close();
-  await new Promise(r => proxy.close(r));
+  await new Promise((r) => proxy.close(r));
   await new Promise((r) => server.close(r));
   await db.close();
   await fs.rm("artifacts/browser-uploads", { recursive: true, force: true });

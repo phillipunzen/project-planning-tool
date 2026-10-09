@@ -58,6 +58,7 @@ export const Card = db.define("Card", {
   columnId: { type: D.STRING(36), allowNull: false },
   position: { type: D.INTEGER, allowNull: false, defaultValue: 0 },
   priority: { type: D.STRING(20), defaultValue: "medium" },
+  progress: { type: D.TINYINT.UNSIGNED, allowNull: false, defaultValue: 0 },
   dueDate: D.DATEONLY,
   labels: { type: D.JSON, defaultValue: [] },
   checklist: { type: D.JSON, defaultValue: [] },
@@ -150,6 +151,12 @@ export async function initializeDatabase() {
     await db
       .getQueryInterface()
       .addColumn("Cards", "checklist", { type: D.JSON, defaultValue: [] });
+  if (!schema.progress)
+    await db.getQueryInterface().addColumn("Cards", "progress", {
+      type: D.TINYINT.UNSIGNED,
+      allowNull: false,
+      defaultValue: 0,
+    });
   await Setting.findOrCreate({
     where: { key: "installation" },
     defaults: { value: "{}" },

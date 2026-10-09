@@ -1392,6 +1392,15 @@ function TaskCard({
           {card.description}
         </p>
       )}
+      <div className="card-completion">
+        <span>Fortschritt</span>
+        <strong>{card.progress ?? 0} %</strong>
+        <progress
+          aria-label={`Fortschritt: ${card.title}`}
+          max={100}
+          value={card.progress ?? 0}
+        />
+      </div>
       {total > 0 && (
         <div
           className="card-progress"
@@ -1615,6 +1624,7 @@ function TaskList({ cards, board, onOpen }) {
           <tr>
             <th>Aufgabe</th>
             <th>Status</th>
+            <th>Fortschritt</th>
             <th>Priorität</th>
             <th>Fällig am</th>
             <th>Verantwortlich</th>
@@ -1644,6 +1654,7 @@ function TaskList({ cards, board, onOpen }) {
                   {board.columns.find((col) => col.id === c.columnId)?.name}
                 </span>
               </td>
+              <td>{c.progress ?? 0} %</td>
               <td>
                 <span
                   className={`priority priority-${priorities[c.priority].color}`}
@@ -2204,6 +2215,7 @@ function CardModal({
     description: c?.description || "",
     columnId: c?.columnId || columnId || board.columns[0].id,
     priority: c?.priority || "medium",
+    progress: c?.progress ?? 0,
     dueDate: c?.dueDate || "",
     assigneeId: c?.assigneeId || "",
     labels: c?.labels.join(", ") || "",
@@ -2478,6 +2490,26 @@ function CardModal({
                 maxLength={248}
               />
             </label>
+            <div className="completion-field">
+              <span id="task-progress-label">Fortschritt</span>
+              <div
+                className="completion-buttons"
+                role="group"
+                aria-labelledby="task-progress-label"
+              >
+                {[0, 25, 50, 75, 100].map((progress) => (
+                  <button
+                    key={progress}
+                    type="button"
+                    aria-pressed={data.progress === progress}
+                    className={data.progress === progress ? "selected" : ""}
+                    onClick={() => field("progress", progress)}
+                  >
+                    {progress} %
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="checklist-heading">
               <h3>
                 <CheckSquare size={17} />
