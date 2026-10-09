@@ -3195,3 +3195,60 @@ fieldset:disabled {
     padding-top: 72px;
   }
 }
+
+.brand {
+  min-width: 0;
+}
+.brand > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.brand-mark,
+.brand-logo {
+  flex-shrink: 0;
+}
+.brand-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+.brand-custom-name {
+  font-size: 18px;
+  letter-spacing: -0.4px;
+}
+.branding-preview {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-soft, #f7f8fc);
+  margin: 24px 0;
+}
+.branding-preview > img,
+.branding-placeholder {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+.branding-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--primary);
+}
+.branding-preview > strong {
+  font-size: 20px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .branding-preview {
+    padding: 14px;
+    gap: 12px;
+  }
+  .branding-preview > strong {
+    font-size: 17px;
+  }
+}

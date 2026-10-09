@@ -1,3 +1,4 @@
+import { readBranding, publicBranding, saveBranding, logoDir } from "./branding.js";
 import {
   requestLanguage,
   translateForRequest,
@@ -182,7 +183,26 @@ app.get(
       setupRequired: !(await User.count()),
       provider: c.provider,
       providerName: c.oidc.name || "Single Sign-on",
+      branding: publicBranding(await readBranding()),
     });
+  }),
+);
+app.get(
+  "/api/branding/logo/:id",
+  api(async (req, res) => {
+    const brand = await readBranding();
+    if (!brand.logo || brand.logo.id !== req.params.id)
+      return res.sendStatus(404);
+    try {
+      const buffer = await fs.readFile(path.join(logoDir, brand.logo.id));
+      res
+        .type(brand.logo.mime)
+        .set("Content-Disposition", "inline")
+        .send(buffer);
+    } catch (error) {
+      if (error.code === "ENOENT") return res.sendStatus(404);
+      throw error;
+    }
   }),
 );
 app.post(
@@ -1365,6 +1385,43 @@ app.delete(
   }),
 );
 app.use("/api/admin", requireAdmin);
+const logoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024, files: 1, fields: 2, fieldSize: 512 },
+});
+app.get(
+  "/api/admin/branding",
+  api(async (req, res) => {
+    res.json(publicBranding(await readBranding()));
+  }),
+);
+app.put(
+  "/api/admin/branding",
+  (req, res, next) => {
+    logoUpload.single("logo")(req, res, (error) => {
+      if (error?.code === "LIMIT_FILE_SIZE")
+        return next(
+          Object.assign(new Error("Das Logo darf maximal 2 MB groß sein."), {
+            status: 400,
+          }),
+        );
+      next(error);
+    });
+  },
+  api(async (req, res) => {
+    const input = z
+      .object({
+        name: z.string().trim().min(1).max(60),
+        removeLogo: z
+          .union([z.boolean(), z.enum(["true", "false"])])
+          .default(false)
+          .transform((value) => value === true || value === "true"),
+      })
+      .strict()
+      .parse(req.body);
+    res.json(await saveBranding(input, req.file));
+  }),
+);
 app.get(
   "/api/admin/users",
   api(async (req, res) =>

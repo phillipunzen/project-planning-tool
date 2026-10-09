@@ -78,6 +78,7 @@ import {
   useLanguage,
   setLanguagePreference,
 } from "./i18n.js";
+import { useBranding, setBranding } from "./branding.js";
 import { CardAutosave } from "./card-autosave.js";
 async function api(url, options = {}) {
   const response = await fetch(`/api${url}`, {
@@ -305,6 +306,7 @@ function App() {
     try {
       const info = await api("/public");
       setPublicInfo(info);
+      setBranding(info.branding);
       try {
         setUser(await api("/me"));
       } catch (e) {
@@ -1065,18 +1067,32 @@ function App() {
   );
 }
 function Brand() {
+  const brand = useBranding();
+  const [failedLogo, setFailedLogo] = useState(null);
   return (
-    <div className="brand">
-      <span className="brand-mark">
-        <i />
-        <i />
-        <i />
-      </span>
-      <span>
-        {t("projekt")}
-        <span>{t("werk")}</span>
-        <em>{"·"}</em>
-      </span>
+    <div className="brand" title={brand.name}>
+      {brand.logoUrl && failedLogo !== brand.logoUrl ? (
+        <img
+          className="brand-logo"
+          src={brand.logoUrl}
+          alt=""
+          onError={() => setFailedLogo(brand.logoUrl)}
+        />
+      ) : (
+        <span className="brand-mark">
+          <i />
+          <i />
+          <i />
+        </span>
+      )}
+      {brand.name === "Projektwerk" ? (
+        <span>
+          projekt<span>werk</span>
+          <em>·</em>
+        </span>
+      ) : (
+        <span className="brand-custom-name">{brand.name}</span>
+      )}
     </div>
   );
 }
@@ -1144,6 +1160,7 @@ function ProfileModal({ user, onClose, onSaved }) {
   );
 }
 function AuthScreen({ info, onSuccess, invitation = null, token }) {
+  const brand = useBranding();
   const [error, setError] = useState(
       new URLSearchParams(location.search).get("authError") || "",
     ),
@@ -1371,7 +1388,7 @@ function AuthScreen({ info, onSuccess, invitation = null, token }) {
           </div>
         </div>
         <span className="login-bottom">
-          {t("Projektwerk · Gemeinsam mehr bewegen")}
+          {t("{0} · Gemeinsam mehr bewegen", [brand.name])}
         </span>
       </div>
     </div>
@@ -3390,7 +3407,137 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
     </Modal>
   );
 }
+function BrandingSettings({ notify }) {
+  const brand = useBranding();
+  const [name, setName] = useState(brand.name),
+    [file, setFile] = useState(null),
+    [removeLogo, setRemoveLogo] = useState(false),
+    [preview, setPreview] = useState(null),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false);
+  const fileInput = useRef(null);
+  useEffect(() => {
+    setPreview(null);
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setPreview(reader.result);
+    reader.onerror = () =>
+      setError(t("Die Logo-Vorschau konnte nicht geladen werden."));
+    reader.readAsDataURL(file);
+    return () => {
+      if (reader.readyState === 1) reader.abort();
+    };
+  }, [file]);
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const body = new FormData();
+      body.append("name", name);
+      body.append("removeLogo", String(removeLogo));
+      if (file) body.append("logo", file);
+      const saved = await api("/admin/branding", { method: "PUT", body });
+      setBranding(saved);
+      setName(saved.name);
+      setFile(null);
+      setRemoveLogo(false);
+      if (fileInput.current) fileInput.current.value = "";
+      notify(t("Name und Logo gespeichert"));
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const image = removeLogo ? null : preview || brand.logoUrl;
+  return (
+    <form className="settings-card" onSubmit={submit}>
+      <div className="section-heading">
+        <h2>{t("Name und Logo")}</h2>
+        <p>
+          {t(
+            "Gestalte den Arbeitsbereich mit eurem Namen und Logo. Die Änderungen gelten für alle Benutzer und die Anmeldeseite.",
+          )}
+        </p>
+      </div>
+      <div className="branding-preview">
+        {image ? (
+          <img src={image} alt={t("Logo-Vorschau")} />
+        ) : (
+          <div className="branding-placeholder">
+            <Layers size={28} />
+          </div>
+        )}
+        <strong>{name.trim() || "Projektwerk"}</strong>
+      </div>
+      <label>
+        {t("Name des Arbeitsbereichs")}
+        <input
+          aria-label={t("Name des Arbeitsbereichs")}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          maxLength={60}
+          disabled={busy}
+        />
+      </label>
+      <label>
+        {t("Eigenes Logo")}
+        <input
+          ref={fileInput}
+          type="file"
+          aria-label={t("Eigenes Logo")}
+          accept="image/png,image/jpeg,image/webp"
+          disabled={busy}
+          onChange={(e) => {
+            const selected = e.target.files[0];
+            setError("");
+            if (selected && selected.size > 2 * 1024 * 1024) {
+              setError(t("Das Logo darf maximal 2 MB groß sein."));
+              setFile(null);
+              setRemoveLogo(false);
+              e.target.value = "";
+              return;
+            }
+            setFile(selected || null);
+            setRemoveLogo(false);
+          }}
+        />
+      </label>
+      <p className="bucket-note">
+        {t(
+          "PNG, JPG oder WebP · maximal 2 MB und 4096 × 4096 Pixel. Das Logo wird auch als Browser-Symbol verwendet.",
+        )}
+      </p>
+      {(brand.logoUrl || file || removeLogo) && (
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={removeLogo}
+            disabled={busy}
+            onChange={(e) => {
+              setRemoveLogo(e.target.checked);
+              if (e.target.checked) {
+                setFile(null);
+                if (fileInput.current) fileInput.current.value = "";
+              }
+            }}
+          />
+          {t("Logo entfernen")}
+        </label>
+      )}
+      <FormError error={error} />
+      <div className="modal-actions">
+        <button className="button primary" disabled={busy}>
+          {busy ? <Spinner /> : t("Speichern")}
+        </button>
+      </div>
+    </form>
+  );
+}
 function Admin({ user, notify, onUpdate }) {
+  const brand = useBranding();
   const [tab, setTab] = useState("auth"),
     [config, setConfig] = useState(null),
     [users, setUsers] = useState([]),
@@ -3454,6 +3601,13 @@ function Admin({ user, notify, onUpdate }) {
       </div>
       <div className="admin-tabs">
         <button
+          className={tab === "general" ? "active" : ""}
+          onClick={() => setTab("general")}
+        >
+          <Palette size={16} />
+          {t("Allgemein")}
+        </button>
+        <button
           className={tab === "auth" ? "active" : ""}
           onClick={() => setTab("auth")}
         >
@@ -3470,6 +3624,7 @@ function Admin({ user, notify, onUpdate }) {
         </button>
       </div>
       <FormError error={error} />
+      {tab === "general" && <BrandingSettings notify={notify} />}
       {tab === "auth" &&
         (!config ? (
           <Spinner />
@@ -3477,14 +3632,16 @@ function Admin({ user, notify, onUpdate }) {
           <form className="settings-card" onSubmit={save}>
             <div className="section-heading">
               <h2>{t("Anmeldeanbieter")}</h2>
-              <p>{t("Verbinde euren Identitätsanbieter mit Projektwerk.")}</p>
+              <p>
+                {t("Verbinde euren Identitätsanbieter mit {0}.", [brand.name])}
+              </p>
             </div>
             <div className="provider-options">
               {[
                 {
                   key: "local",
                   title: "Lokales Konto",
-                  description: "Konten in Projektwerk",
+                  description: t("Konten in {0}", [brand.name]),
                   Icon: Lock,
                 },
                 {

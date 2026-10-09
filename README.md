@@ -6,6 +6,8 @@ Repository: [phillipunzen/project-planning-tool](https://github.com/phillipunzen
 
 ## Funktionen
 
+- Eigener Name und eigenes Logo unter „Administration → Allgemein“. Nur Administratoren dürfen die Einstellungen ändern. Name (1–60 Zeichen) und Logo gelten auf Anmeldung und Arbeitsbereich; das Logo dient auch als Browser-Symbol. PNG, JPG und WebP bis 2 MB und 4096 × 4096 Pixel, mit Vorschau und Entfernen-Funktion. Der Name liegt in MariaDB, das Logo im persistenten Upload-Volume; beide werden von der bestehenden Sicherung erfasst.
+
 - Deutsch und Englisch: standardmäßig die erste unterstützte Browsersprache (sonst Englisch). Unter „Profileinstellungen → Sprache“ Deutsch, English oder Automatisch festlegen; die Wahl wird im Benutzerprofil in MariaDB für alle Geräte gespeichert. Eigene Projekt-, Bucket- und Karteninhalte werden nicht übersetzt. Neue Standard-Buckets und Beispielprojekte werden in der aktuellen Sprache angelegt.
 - Hell- und Dunkelmodus über „Darstellung“ (System, Hell, Dunkel), auch auf der Anmeldeseite. Die Auswahl wird lokal im Browser gespeichert und zwischen offenen Tabs synchronisiert; „System“ folgt automatisch der Geräteeinstellung.
 - Projekte mit mehreren Kanban-Boards und frei anpassbaren Buckets (Statusspalten). Über „Buckets bearbeiten“ Überschriften und Farben ändern, Reihenfolge in beide Richtungen verschieben sowie Buckets hinzufügen oder leere Buckets entfernen (1–12 pro Board). Erledigt-Buckets sind frei markierbar und unabhängig von der Reihenfolge; bestehende Boards behalten ihre bisherige Erledigt-Spalte.

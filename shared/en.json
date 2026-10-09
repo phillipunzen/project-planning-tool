@@ -407,5 +407,21 @@
   "Ziehe diese Karte in eine andere Spalte. Am Handy kannst du den Griff rechts oben verwenden.": "Drag this card to another bucket. On your phone, use the handle in the top right.",
   "Öffne die Karte und ergänze eine Beschreibung, einen Termin oder eine verantwortliche Person.": "Open the card and add a description, due date or assignee.",
   "Über „Einladen“ kannst du einen persönlichen Link erzeugen und mit deinem Team teilen.": "Use Invite to create a personal link and share it with your team.",
-  "Eigentümer": "Owner"
+  "Eigentümer": "Owner",
+  "Allgemein": "General",
+  "{0} · Gemeinsam mehr bewegen": "{0} · Achieve more together",
+  "Verbinde euren Identitätsanbieter mit {0}.": "Connect your identity provider to {0}.",
+  "Konten in {0}": "Accounts in {0}",
+  "Name und Logo": "Name and logo",
+  "Name und Logo gespeichert": "Name and logo saved",
+  "Gestalte den Arbeitsbereich mit eurem Namen und Logo. Die Änderungen gelten für alle Benutzer und die Anmeldeseite.": "Customize the workspace with your name and logo. Changes apply to all users and the sign-in page.",
+  "Logo-Vorschau": "Logo preview",
+  "Die Logo-Vorschau konnte nicht geladen werden.": "The logo preview could not be loaded.",
+  "Name des Arbeitsbereichs": "Workspace name",
+  "Eigenes Logo": "Custom logo",
+  "Das Logo darf maximal 2 MB groß sein.": "The logo must not exceed 2 MB.",
+  "PNG, JPG oder WebP · maximal 2 MB und 4096 × 4096 Pixel. Das Logo wird auch als Browser-Symbol verwendet.": "PNG, JPG or WebP · up to 2 MB and 4096 × 4096 pixels. The logo is also used as the browser icon.",
+  "Logo entfernen": "Remove logo",
+  "Bitte ein gültiges PNG-, JPG- oder WebP-Logo mit maximal 4096 × 4096 Pixeln wählen.": "Please choose a valid PNG, JPG or WebP logo no larger than 4096 × 4096 pixels.",
+  "Logo hochladen oder entfernen, nicht beides gleichzeitig.": "Choose either uploading or removing a logo, not both at once."
 }

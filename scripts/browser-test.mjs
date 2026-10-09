@@ -715,6 +715,178 @@ try {
   await expect(english.locator("html")).toHaveAttribute("lang", "en");
   await englishContext.close();
   console.log("PASS: Deutsche/englische Browsersprache, übersetzte Karten/Buckets/Admin/Verlauf und gespeicherte Profilsprache über Geräte hinweg");
+  // Branding applies to signed-in users and the public login screen, across reloads/devices.
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("lang", "de");
+  await page.getByRole("button", { name: "Administration", exact: true }).click();
+  await page.getByRole("button", { name: "Allgemein", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Name und Logo", exact: true }),
+  ).toBeVisible();
+  const logoFixtures = JSON.parse(
+    await fs.readFile("tests/fixtures/logo-images.json", "utf8"),
+  );
+  await page
+    .getByLabel("Name des Arbeitsbereichs", { exact: true })
+    .fill("Teamplanung Beispiel GmbH");
+  await page.getByLabel("Eigenes Logo", { exact: true }).setInputFiles({
+    name: "logo.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(logoFixtures.png, "base64"),
+  });
+  await expect(
+    page.getByRole("img", { name: "Logo-Vorschau", exact: true }),
+  ).toHaveAttribute("src", /^data:image\/png/);
+  await page
+    .getByLabel("Eigenes Logo", { exact: true })
+    .setInputFiles({
+      name: "large.png",
+      mimeType: "image/png",
+      buffer: Buffer.alloc(2 * 1024 * 1024 + 1),
+    });
+  await expect(
+    page.getByText("Das Logo darf maximal 2 MB groß sein.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: "Logo-Vorschau", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByLabel("Eigenes Logo", { exact: true })
+    .setInputFiles({
+      name: "logo.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(logoFixtures.png, "base64"),
+    });
+  await expect(
+    page.getByRole("img", { name: "Logo-Vorschau", exact: true }),
+  ).toHaveAttribute("src", /^data:image\/png/);
+  await page.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(page.locator(".brand")).toHaveAttribute(
+    "title",
+    "Teamplanung Beispiel GmbH",
+  );
+  await expect(page).toHaveTitle(
+    "Teamplanung Beispiel GmbH · Gemeinsam mehr bewegen",
+  );
+  await expect(page.locator(".brand-logo")).toHaveCount(1);
+  await expect
+    .poll(() =>
+      page
+        .locator(".brand-logo")
+        .evaluate((img) => img.complete && img.naturalWidth > 0),
+    )
+    .toBe(true);
+  const logoUrl = await page.locator(".brand-logo").getAttribute("src");
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", logoUrl);
+  await page.screenshot({
+    path: "artifacts/branding-desktop.png",
+    fullPage: true,
+  });
+  await page.reload();
+  await expect(page.locator(".brand")).toHaveAttribute(
+    "title",
+    "Teamplanung Beispiel GmbH",
+  );
+  await expect(page.locator(".brand-logo")).toHaveAttribute("src", logoUrl);
+  const brandingMobileContext = await browser.newContext({
+    locale: "en-US",
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    colorScheme: "dark",
+    storageState: await page.context().storageState(),
+  });
+  const brandingMobile = await brandingMobileContext.newPage();
+  brandingMobile.on("pageerror", (e) => errors.push(e.message));
+  await brandingMobile.goto(base);
+  await expect(brandingMobile).toHaveTitle(
+    "Teamplanung Beispiel GmbH · Achieve more together",
+  );
+  await brandingMobile
+    .getByRole("button", { name: "Open menu", exact: true })
+    .click();
+  await expect(brandingMobile.locator(".brand-logo")).toHaveAttribute(
+    "src",
+    logoUrl,
+  );
+  await brandingMobile
+    .getByRole("button", { name: "Administration", exact: true })
+    .click();
+  await brandingMobile
+    .getByRole("button", { name: "General", exact: true })
+    .click();
+  await expect(
+    brandingMobile.getByLabel("Workspace name", { exact: true }),
+  ).toHaveValue("Teamplanung Beispiel GmbH");
+  await expect(
+    brandingMobile.getByRole("img", { name: "Logo preview", exact: true }),
+  ).toBeVisible();
+  if (
+    await brandingMobile.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    )
+  )
+    throw new Error("Mobile branding settings overflow");
+  await brandingMobile.screenshot({
+    path: "artifacts/branding-mobile-dark.png",
+    animations: "disabled",
+    fullPage: true,
+  });
+  await brandingMobileContext.close();
+  const brandingPublicContext = await browser.newContext({ locale: "de-DE" });
+  const brandingPublic = await brandingPublicContext.newPage();
+  brandingPublic.on("pageerror", (e) => errors.push(e.message));
+  await brandingPublic.goto(base);
+  await expect(
+    brandingPublic.getByRole("button", { name: "Anmelden", exact: true }),
+  ).toBeVisible();
+  await expect(brandingPublic.locator(".brand").first()).toHaveAttribute(
+    "title",
+    "Teamplanung Beispiel GmbH",
+  );
+  await expect(brandingPublic.locator(".brand-logo").first()).toHaveAttribute(
+    "src",
+    logoUrl,
+  );
+  await expect
+    .poll(() =>
+      brandingPublic
+        .locator(".brand-logo")
+        .first()
+        .evaluate((img) => img.complete && img.naturalWidth > 0),
+    )
+    .toBe(true);
+  await expect(brandingPublic.locator(".login-bottom")).toHaveText(
+    "Teamplanung Beispiel GmbH · Gemeinsam mehr bewegen",
+  );
+  await brandingPublic.screenshot({
+    path: "artifacts/branding-login.png",
+    fullPage: true,
+  });
+  await brandingPublicContext.close();
+  await page.getByRole("button", { name: "Administration", exact: true }).click();
+  await page.getByRole("button", { name: "Allgemein", exact: true }).click();
+  // A name-only edit preserves the uploaded logo.
+  await page
+    .getByLabel("Name des Arbeitsbereichs", { exact: true })
+    .fill("Projektwerk");
+  await page.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(page.locator(".brand")).toHaveAttribute("title", "Projektwerk");
+  await expect(page.locator(".brand-logo")).toHaveAttribute("src", logoUrl);
+  await page.getByLabel("Logo entfernen", { exact: true }).check();
+  await expect(
+    page.getByRole("img", { name: "Logo-Vorschau", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(page.locator(".brand-logo")).toHaveCount(0);
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute(
+    "href",
+    "/favicon.svg",
+  );
+  await page.reload();
+  await expect(page.locator(".brand-mark")).toBeVisible();
+  console.log(
+    "PASS: Admin-Name und Logo mit Vorschau, Persistenz, deutscher/englischer Anmeldung, mobilem Dark Mode und Entfernen",
+  );
   if (errors.length)
     throw new Error(`Browser runtime errors: ${errors.join("; ")}`);
   console.log("PASS: Desktop, Handy und Tablet ohne Browser-Laufzeitfehler");

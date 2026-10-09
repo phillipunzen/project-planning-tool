@@ -817,6 +817,188 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
       );
     },
   );
+  await t.test(
+    "only administrators can change branding; public metadata contains no storage paths",
+    async () => {
+      assert.deepEqual((await anonymous.call("/public")).data.branding, {
+        name: "Projektwerk",
+        logoUrl: null,
+        logoMime: null,
+      });
+      const current = await admin.call("/admin/branding");
+      assert.equal(current.status, 200);
+      assert.equal((await anonymous.call("/admin/branding")).status, 401);
+      assert.equal((await viewer.call("/admin/branding")).status, 403);
+      assert.equal(
+        (await anonymous.call("/admin/branding", "PUT", { name: "Anonymous" }))
+          .status,
+        401,
+      );
+      assert.equal(
+        (await editor.call("/admin/branding", "PUT", { name: "Editor" })).status,
+        403,
+      );
+      const form = new FormData();
+      form.append("name", "Unauthorized upload");
+      form.append("logo", new Blob(["bad"]), "logo.png");
+      assert.equal(
+        (await viewer.call("/admin/branding", "PUT", form)).status,
+        403,
+      );
+      assert.equal(
+        (
+          await admin.call(
+            "/admin/branding",
+            "PUT",
+            { name: "Changed" },
+            { Origin: "https://evil.example" },
+          )
+        ).status,
+        403,
+      );
+      for (const body of [
+        { name: "" },
+        { name: "   " },
+        { name: "x".repeat(61) },
+        { name: "Allowed", role: "admin" },
+        { name: "Allowed", removeLogo: "unexpected" },
+      ]) {
+        assert.equal(
+          (await admin.call("/admin/branding", "PUT", body)).status,
+          400,
+        );
+      }
+      const saved = await admin.call("/admin/branding", "PUT", {
+        name: "  Unsere Planung  ",
+      });
+      assert.equal(saved.status, 200);
+      assert.equal(saved.data.name, "Unsere Planung");
+      assert.equal(
+        JSON.parse((await Setting.findByPk("branding")).value).name,
+        "Unsere Planung",
+      );
+      assert.deepEqual(
+        (await anonymous.call("/public")).data.branding,
+        saved.data,
+      );
+    },
+  );
+  await t.test(
+    "PNG, JPEG and WebP logos persist, render publicly, replace and remove without affecting names",
+    async () => {
+      const fixtures = JSON.parse(
+        await fs.readFile("tests/fixtures/logo-images.json", "utf8"),
+      );
+      let previousUrl;
+      for (const [format, encoded] of Object.entries(fixtures)) {
+        const bytes = Buffer.from(encoded, "base64");
+        const form = new FormData();
+        form.append("name", "Unsere Planung");
+        // Detect the real format independently of the supplied filename and MIME.
+        form.append(
+          "logo",
+          new Blob([bytes], { type: "application/octet-stream" }),
+          "untrusted-name.txt",
+        );
+        const saved = await admin.call("/admin/branding", "PUT", form);
+        assert.equal(saved.status, 200, JSON.stringify(saved.data));
+        assert.equal(saved.data.logoMime, `image/${format}`);
+        assert.deepEqual(Object.keys(saved.data).sort(), [
+          "logoMime",
+          "logoUrl",
+          "name",
+        ]);
+        assert.match(
+          saved.data.logoUrl,
+          /^\/api\/branding\/logo\/[a-f0-9-]{36}$/,
+        );
+        const logo = await fetch(base + saved.data.logoUrl);
+        assert.equal(logo.status, 200);
+        assert.equal(logo.headers.get("content-type"), `image/${format}`);
+        assert.equal(logo.headers.get("x-content-type-options"), "nosniff");
+        assert.equal(logo.headers.get("content-disposition"), "inline");
+        assert.deepEqual(Buffer.from(await logo.arrayBuffer()), bytes);
+        if (previousUrl)
+          assert.equal((await fetch(base + previousUrl)).status, 404);
+        previousUrl = saved.data.logoUrl;
+        const rename = await admin.call("/admin/branding", "PUT", {
+          name: "Neuer Name",
+        });
+        assert.equal(rename.data.logoUrl, saved.data.logoUrl);
+        assert.equal(
+          (await anonymous.call("/public")).data.branding.name,
+          "Neuer Name",
+        );
+        assert.equal(
+          (await fs.readdir("artifacts/test-uploads/branding")).length,
+          1,
+        );
+      }
+      const removed = await admin.call("/admin/branding", "PUT", {
+        name: "Neuer Name",
+        removeLogo: true,
+      });
+      assert.deepEqual(removed.data, {
+        name: "Neuer Name",
+        logoUrl: null,
+        logoMime: null,
+      });
+      assert.equal((await fetch(base + previousUrl)).status, 404);
+      assert.deepEqual(await fs.readdir("artifacts/test-uploads/branding"), []);
+      assert.equal(
+        (await fetch(base + "/api/branding/logo/not-a-logo")).status,
+        404,
+      );
+    },
+  );
+  await t.test(
+    "invalid, active-content and oversized logos are rejected without changing saved branding",
+    async () => {
+      const fixtures = JSON.parse(
+        await fs.readFile("tests/fixtures/logo-images.json", "utf8"),
+      );
+      const oversizedDimensions = Buffer.from(fixtures.png, "base64");
+      oversizedDimensions.writeUInt32BE(4097, 16);
+      const invalids = [
+        Buffer.from(
+          '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+        ),
+        Buffer.from("<html>bad</html>"),
+        Buffer.from(fixtures.png, "base64").subarray(0, 35),
+        oversizedDimensions,
+        Buffer.alloc(2 * 1024 * 1024 + 1),
+      ];
+      for (const bytes of invalids) {
+        const form = new FormData();
+        form.append("name", "Should not be saved");
+        form.append("logo", new Blob([bytes], { type: "image/png" }), "logo.png");
+        const response = await admin.call("/admin/branding", "PUT", form, {
+          "Accept-Language": "en",
+        });
+        assert.equal(response.status, 400);
+        assert.match(response.data.error, /logo/);
+      }
+      const conflicting = new FormData();
+      conflicting.append("name", "Should not be saved");
+      conflicting.append("removeLogo", "true");
+      conflicting.append(
+        "logo",
+        new Blob([Buffer.from(fixtures.png, "base64")]),
+        "logo.png",
+      );
+      assert.equal(
+        (await admin.call("/admin/branding", "PUT", conflicting)).status,
+        400,
+      );
+      assert.deepEqual((await anonymous.call("/public")).data.branding, {
+        name: "Neuer Name",
+        logoUrl: null,
+        logoMime: null,
+      });
+      assert.deepEqual(await fs.readdir("artifacts/test-uploads/branding"), []);
+      await admin.call("/admin/branding", "PUT", { name: "Projektwerk" });
+    },
+  );
   await t.test("disabled user sessions stop working immediately", async () => {
     assert.equal(
       (
