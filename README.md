@@ -24,7 +24,8 @@ Repository: [phillipunzen/project-planning-tool](https://github.com/phillipunzen
 Der Workflow `.github/workflows/docker-image.yml` baut Images für **linux/amd64 und linux/arm64** und veröffentlicht sie als Package dieses Repositorys unter `ghcr.io/phillipunzen/project-planning-tool`.
 
 - `feature-card-progress`: aktueller Stand mit den fünf Fortschrittsbuttons.
-- `main` und `latest`: Stand des Hauptbranches, sobald der Workflow auf `main` enthalten ist und dort erfolgreich gelaufen ist.
+- `latest`: aktueller veröffentlichter Stand, einschließlich der fünf Fortschrittsbuttons. Pushes auf `main` und den aktuellen Featurebranch aktualisieren dieses Tag.
+- `main`: Stand des Hauptbranches, sobald der Workflow auf `main` enthalten ist und dort erfolgreich gelaufen ist.
 - `sha-<vollständige Commit-ID>`: bestimmter Quellcode-Stand.
 - Versionstags wie `v1.0.0` erzeugen zusätzlich das Image-Tag `1.0.0`.
 
@@ -40,7 +41,7 @@ docker compose -f docker-compose.yml -f docker-compose.image.yml pull app
 docker compose -f docker-compose.yml -f docker-compose.image.yml up -d --wait
 ```
 
-Das Override `docker-compose.image.yml` entfernt die lokale Build-Konfiguration und verwendet `APP_IMAGE` (Standard: `ghcr.io/phillipunzen/project-planning-tool:feature-card-progress`). Alle fünf MariaDB-ENV-Variablen und das Upload-Volume bleiben erhalten. Dafür ist Docker Compose >=2.24.4 erforderlich (`!reset`). Für den optionalen lokalen DB-Container `-f docker-compose.local.yml` vor dem Image-Override ergänzen.
+Das Override `docker-compose.image.yml` entfernt die lokale Build-Konfiguration und verwendet `APP_IMAGE` (Standard: `ghcr.io/phillipunzen/project-planning-tool:latest`). Alle fünf MariaDB-ENV-Variablen und das Upload-Volume bleiben erhalten. Dafür ist Docker Compose >=2.24.4 erforderlich (`!reset`). Für den optionalen lokalen DB-Container `-f docker-compose.local.yml` vor dem Image-Override ergänzen.
 
 Falls das Package privat ist, vorher mit einem GitHub-Konto mit Package-Zugriff anmelden (`docker login ghcr.io -u phillipunzen`, als Passwort ein Token mit `read:packages`). Für anonyme Downloads muss der Eigentümer in den Package-Einstellungen die Sichtbarkeit auf **Public** stellen. Ein öffentliches Quellcode-Repository macht neue GHCR-Packages nicht automatisch öffentlich.
 

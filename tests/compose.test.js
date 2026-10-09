@@ -87,7 +87,7 @@ await test("optional local database uses the same schema and account and a priva
 await test("published image mode retains external DB settings and removes the local build", () => {
   const c = config(["docker-compose.yml", "docker-compose.image.yml"]);
   assert.equal(c.services.app.build, undefined);
-  assert.equal(c.services.app.image, "ghcr.io/phillipunzen/project-planning-tool:feature-card-progress");
+  assert.equal(c.services.app.image, "ghcr.io/phillipunzen/project-planning-tool:latest");
   assert.equal(c.services.app.pull_policy, "always");
   assert.equal(c.services.mariadb, undefined);
   for (const name of ["DATABASE_HOST", "DATABASE_PORT", "DATABASE_NAME", "DATABASE_USER", "DATABASE_PASSWORD"])

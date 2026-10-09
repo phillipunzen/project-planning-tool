@@ -2,5 +2,5 @@
 services:
   app:
     build: !reset null
-    image: ${APP_IMAGE:-ghcr.io/phillipunzen/project-planning-tool:feature-card-progress}
+    image: ${APP_IMAGE:-ghcr.io/phillipunzen/project-planning-tool:latest}
     pull_policy: always
