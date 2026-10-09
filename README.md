@@ -2,21 +2,56 @@
 
 Webbasiertes Projektplanungstool für Teams, mit React, Node.js und MariaDB.
 
-Repository: [phillipunzen/project-planning-tool](https://github.com/phillipunzen/project-planning-tool). Die Oberfläche ist deutschsprachig und für PC, Tablet und Handy ausgelegt.
+Repository: [phillipunzen/project-planning-tool](https://github.com/phillipunzen/project-planning-tool). Die Oberfläche unterstützt Deutsch und Englisch und ist für PC, Tablet und Handy ausgelegt.
 
 ## Funktionen
 
-- Projekte mit mehreren Kanban-Boards und anpassbaren Statusspalten.
+- Eigener Name und eigenes Logo unter „Administration → Allgemein“. Nur Administratoren dürfen die Einstellungen ändern. Name (1–60 Zeichen) und Logo gelten auf Anmeldung und Arbeitsbereich; das Logo dient auch als Browser-Symbol. PNG, JPG und WebP bis 2 MB und 4096 × 4096 Pixel, mit Vorschau und Entfernen-Funktion. Der Name liegt in MariaDB, das Logo im persistenten Upload-Volume; beide werden von der bestehenden Sicherung erfasst.
+
+- Deutsch und Englisch: standardmäßig die erste unterstützte Browsersprache (sonst Englisch). Unter „Profileinstellungen → Sprache“ Deutsch, English oder Automatisch festlegen; die Wahl wird im Benutzerprofil in MariaDB für alle Geräte gespeichert. Eigene Projekt-, Bucket- und Karteninhalte werden nicht übersetzt. Neue Standard-Buckets und Beispielprojekte werden in der aktuellen Sprache angelegt.
+- Hell- und Dunkelmodus über „Darstellung“ (System, Hell, Dunkel), auch auf der Anmeldeseite. Die Auswahl wird lokal im Browser gespeichert und zwischen offenen Tabs synchronisiert; „System“ folgt automatisch der Geräteeinstellung.
+- Projekticons: 16 Symbole mit Projektfarbe, sichtbar in Navigation, Übersicht und Projektkopf. Beim Anlegen und unter „Projekteinstellungen → Projektsymbol“ auswählbar; Änderungen dürfen Projekteigentümer speichern.
+- Projekte mit mehreren Kanban-Boards und frei anpassbaren Buckets (Statusspalten). Über „Buckets bearbeiten“ Überschriften und Farben ändern, Reihenfolge in beide Richtungen verschieben sowie Buckets hinzufügen oder leere Buckets entfernen (1–12 pro Board). Erledigt-Buckets sind frei markierbar und unabhängig von der Reihenfolge; bestehende Boards behalten ihre bisherige Erledigt-Spalte.
 - Aufgaben mit Beschreibung, Priorität (niedrig, mittel, hoch, dringend), Fälligkeit, Verantwortlichem und Labels.
 - Verschieben und Sortieren mit Maus, Touch-Griff oder Tastatur (Leertaste, Pfeile, Leertaste; Escape zum Abbrechen). Alternativ Status in den Aufgabendetails ändern.
 - Checklisten mit einzelnen Punkten und Fortschrittsanzeige.
+- Manueller Gesamtfortschritt pro Aufgabe mit fünf Buttons: 0 %, 25 %, 50 %, 75 % und 100 %. Anzeige auf Kanban-Karten und in der Liste; unabhängig von Statusspalte und Checkliste. Änderungen erscheinen im Board-Verlauf.
 - Dateianhänge bis 20 MB pro Datei. Downloads sind durch Projektmitgliedschaft geschützt und werden als Download ausgeliefert.
+- Bestehende Aufgabendetails speichern automatisch: Prozent-Buttons, Auswahlfelder und Checklisten direkt, Texte nach einer Sekunde Schreibpause oder beim Verlassen des Feldes. Beim Schließen werden ausstehende Änderungen gespeichert; Fehler und Konflikte bleiben sichtbar. Neue Aufgaben werden einmal mit „Aufgabe erstellen“ angelegt.
 - Kommentare als Statusupdates und chronologischer Änderungsverlauf pro Board.
 - Kanban-, Listenansicht, Suche, Prioritätsfilter und persönliche Aufgabenübersicht.
 - Projekteigentümer, Bearbeiter und Leser. Administrationsrechte gewähren keinen automatischen Zugriff auf fremde Projekte.
 - Persönliche Einladungslinks, die an eine E-Mail-Adresse gebunden sind und 7 Tage gelten. Keine automatische E-Mail-Zustellung.
 - Administration für lokale Konten, Microsoft Active Directory über LDAPS/StartTLS oder OpenID Connect (z. B. Microsoft Entra ID, Keycloak).
 - Gemeinsame MariaDB-Daten, Synchronisierung alle 5 Sekunden und Konflikterkennung bei gleichzeitigen Kartenänderungen.
+
+## Fertiges Docker-Image aus GitHub Container Registry
+
+Der Workflow `.github/workflows/docker-image.yml` baut Images für **linux/amd64 und linux/arm64** und veröffentlicht sie als Package dieses Repositorys unter `ghcr.io/phillipunzen/project-planning-tool`.
+
+- `feature-card-progress`: aktueller Stand mit den fünf Fortschrittsbuttons.
+- `latest`: aktueller veröffentlichter Stand, einschließlich der fünf Fortschrittsbuttons. Pushes auf `main` und den aktuellen Featurebranch aktualisieren dieses Tag.
+- `main`: Stand des Hauptbranches, sobald der Workflow auf `main` enthalten ist und dort erfolgreich gelaufen ist.
+- `sha-<vollständige Commit-ID>`: bestimmter Quellcode-Stand.
+- Versionstags wie `v1.0.0` erzeugen zusätzlich das Image-Tag `1.0.0`.
+
+In Pull Requests wird nur gebaut; es werden keine Images veröffentlicht. Pushes auf `main` und `feature/card-progress`, Versionstags und manuell gestartete Läufe veröffentlichen Images. Die Anmeldung erfolgt mit dem kurzlebigen `GITHUB_TOKEN` des Workflows und `packages: write`; ein separat gespeichertes Registry-Passwort ist nicht erforderlich.
+
+Für den Betrieb **ohne lokalen Build** die `.env` wie unten mit der externen MariaDB und dem Sitzungsschlüssel einrichten, dann:
+
+```bash
+# Optional: auf eine bestimmte Version oder einen Digest festlegen.
+# APP_IMAGE=ghcr.io/phillipunzen/project-planning-tool@sha256:... in .env
+
+docker compose -f docker-compose.yml -f docker-compose.image.yml pull app
+docker compose -f docker-compose.yml -f docker-compose.image.yml up -d --wait
+```
+
+Das Override `docker-compose.image.yml` entfernt die lokale Build-Konfiguration und verwendet `APP_IMAGE` (Standard: `ghcr.io/phillipunzen/project-planning-tool:latest`). Alle fünf MariaDB-ENV-Variablen und das Upload-Volume bleiben erhalten. Dafür ist Docker Compose >=2.24.4 erforderlich (`!reset`). Für den optionalen lokalen DB-Container `-f docker-compose.local.yml` vor dem Image-Override ergänzen.
+
+Falls das Package privat ist, vorher mit einem GitHub-Konto mit Package-Zugriff anmelden (`docker login ghcr.io -u phillipunzen`, als Passwort ein Token mit `read:packages`). Für anonyme Downloads muss der Eigentümer in den Package-Einstellungen die Sichtbarkeit auf **Public** stellen. Ein öffentliches Quellcode-Repository macht neue GHCR-Packages nicht automatisch öffentlich.
+
+Zum dauerhaften Auswählen des Image-Modus `COMPOSE_FILE=docker-compose.yml:docker-compose.image.yml` in `.env` setzen; anschließend funktionieren auch die normalen Betriebs- und Sicherungsbefehle. Die Image-Veröffentlichung enthält weder `.env`, Benutzerdateien noch Datenbankinhalte.
 
 ## Docker mit externer MariaDB (Standard)
 
@@ -152,7 +187,7 @@ docker compose stop             # anhalten; Daten bleiben erhalten
 
 `GET /api/health` prüft auch die Datenbankverbindung. Die App besitzt einen Docker-Healthcheck, der die externe Datenbankverbindung mitprüft. Der optionale MariaDB-Container hat einen eigenen Healthcheck. Die App läuft als unprivilegierter `node`-Benutzer. Datei-Uploads werden auf ausgewählte Endungen begrenzt; ein Virenscanner ist in dieser Version nicht enthalten. Anhänge sollten daher wie andere intern geteilte Dateien behandelt werden.
 
-Die erste Schema-Version erstellt fehlende Tabellen additiv; ein vorhandenes `Cards`-Schema erhält bei Bedarf die Checklisten-Spalte. Es gibt kein automatisches `sync({alter:true})` oder Zurücksetzen von Nutzdaten. Für spätere Schemaänderungen sind versionierte Migrationen zu ergänzen.
+Die erste Schema-Version erstellt fehlende Tabellen additiv; ein vorhandenes `Cards`-Schema erhält bei Bedarf die Checklisten- und Fortschrittsspalten. Bestehende Karten starten mit 0 Prozent; bestehende Daten bleiben erhalten. Es gibt kein automatisches `sync({alter:true})` oder Zurücksetzen von Nutzdaten. Für spätere Schemaänderungen sind versionierte Migrationen zu ergänzen.
 
 ### Sicherung und Wiederherstellung
 

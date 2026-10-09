@@ -1,0 +1,6 @@
+# Combine with docker-compose.yml to pull the published image instead of building.
+services:
+  app:
+    build: !reset null
+    image: ${APP_IMAGE:-ghcr.io/phillipunzen/project-planning-tool:latest}
+    pull_policy: always

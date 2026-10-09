@@ -7,7 +7,7 @@
     "dev": "concurrently -k \"node --env-file=.env --watch server/index.js\" \"vite --host 0.0.0.0 --port 8110\"",
     "build": "vite build",
     "start": "node server/index.js",
-    "test": "node --env-file=.env --test --test-concurrency=1 tests/api.test.js tests/auth.test.js",
+    "test": "node --env-file=.env --test --test-concurrency=1 tests/api.test.js tests/auth.test.js tests/autosave.test.js tests/i18n.test.js",
     "test:ui": "node --env-file=.env scripts/browser-test.mjs",
     "test:compose": "node --test tests/compose.test.js"
   },

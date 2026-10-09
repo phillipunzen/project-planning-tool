@@ -6,7 +6,8 @@ process.env.ALLOWED_ORIGINS = "http://localhost:54734";
 process.env.DATABASE_NAME = "projektwerk_test";
 process.env.UPLOAD_DIR = "artifacts/test-uploads";
 const { app } = await import("../server/index.js");
-const { db, Setting, Invitation } = await import("../server/db.js");
+const { db, Setting, Invitation, Card, Board, User, initializeDatabase } =
+  await import("../server/db.js");
 await db.sync({ force: true });
 await Setting.create({ key: "installation", value: "{}" });
 const server = app.listen(0, "127.0.0.1");
@@ -116,6 +117,31 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
       403,
     );
   });
+  await t.test("profile language migrates additively, persists and cannot alter permissions", async () => {
+    const before = (await admin.call("/me")).data;
+    await db.query("ALTER TABLE `Users` DROP COLUMN `language`");
+    await initializeDatabase();
+    const migrated = (await admin.call("/me")).data;
+    assert.equal(migrated.id, before.id);
+    assert.equal(migrated.name, before.name);
+    assert.equal(migrated.language, "system");
+    assert.equal((await anonymous.call("/me", "PATCH", { language: "en" })).status, 401);
+    for (const invalid of [{ language: "fr" }, {}, { language: "en", role: "admin" }, { language: "en", id: crypto.randomUUID() }]) {
+      assert.equal((await admin.call("/me", "PATCH", invalid)).status, 400);
+    }
+    const saved = await admin.call("/me", "PATCH", { language: "en" });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.data.language, "en");
+    assert.equal(saved.data.password, undefined);
+    assert.equal((await User.findByPk(before.id)).language, "en");
+    const device = client();
+    const identity = await User.findByPk(before.id);
+    assert.equal((await device.call("/auth/login", "POST", { email: identity.email, password: "TestPw123!" })).data.language, "en");
+    const denied = await device.call(`/boards/${crypto.randomUUID()}`);
+    assert.equal(denied.status, 404);
+    assert.equal(denied.data.error, "Board not found.");
+    assert.equal((await admin.call("/me", "PATCH", { language: "system" })).status, 200);
+  });
   await t.test("create project and multiple boards", async () => {
     const created = await admin.call("/projects", "POST", {
       name: "Website Relaunch",
@@ -137,6 +163,17 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
       ).status,
       201,
     );
+  });
+  await t.test("English requests create translated defaults while retaining custom project names", async () => {
+    const custom = "Offen – Teamprojekt";
+    const result = await admin.call("/projects", "POST", { name: custom }, { "Accept-Language": "en-GB,en;q=0.9" });
+    assert.equal(result.status, 201);
+    assert.equal(result.data.name, custom);
+    const created = (await admin.call("/projects")).data.find(p => p.id === result.data.id);
+    const englishBoard = (await admin.call(`/boards/${created.Boards[0].id}`)).data;
+    assert.equal(englishBoard.name, "Project board");
+    assert.deepEqual(englishBoard.columns.map(c => c.name), ["To do", "In progress", "Review", "Done"]);
+    assert.equal((await admin.call(`/projects/${created.id}`, "DELETE")).status, 200);
   });
   await t.test("administrator can provision local accounts", async () => {
     assert.equal((await admin.call("/admin/users", "POST", {
@@ -217,13 +254,37 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
     },
   );
   await t.test(
-    "cards persist priority, labels, due dates and checklist",
+    "existing cards receive zero progress without losing data during migration",
+    async () => {
+      const legacy = await Card.create({
+        title: "Bestehende Aufgabe",
+        description: "Details bleiben erhalten",
+        BoardId: board.id,
+        columnId: board.columns[0].id,
+        checklist: [
+          { id: crypto.randomUUID(), text: "Bestehender Punkt", done: true },
+        ],
+      });
+      // The fixture deliberately recreates the pre-upgrade schema, only in projektwerk_test.
+      await db.query("ALTER TABLE `Cards` DROP COLUMN `progress`");
+      await initializeDatabase();
+      await initializeDatabase();
+      const migrated = await Card.findByPk(legacy.id);
+      assert.equal(migrated.progress, 0);
+      assert.equal(migrated.description, legacy.description);
+      assert.deepEqual(migrated.checklist, legacy.checklist);
+      await migrated.destroy();
+    },
+  );
+  await t.test(
+    "cards persist priority, labels, due dates, checklist and progress",
     async () => {
       const r = await editor.call(`/boards/${board.id}/cards`, "POST", {
         title: "Implementierung",
         description: "Details",
         columnId: board.columns[0].id,
         priority: "high",
+        progress: 25,
         dueDate: "2026-11-01",
         assigneeId: editorUser.id,
         labels: ["Entwicklung"],
@@ -236,9 +297,151 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
       card = r.data;
       const loaded = (await viewer.call(`/boards/${board.id}`)).data;
       assert.equal(loaded.cards[0].priority, "high");
+      assert.equal(loaded.cards[0].progress, 25);
       assert.equal(loaded.cards[0].checklist.length, 2);
       assert.equal(loaded.cards[0].assignee.name, "Editor");
       board = loaded;
+    },
+  );
+  await t.test(
+    "progress validates boundaries, permissions and preserves omitted updates",
+    async () => {
+      for (const progress of [-1, 101, 12.5, 35, "50", null]) {
+        assert.equal(
+          (
+            await editor.call(`/boards/${board.id}/cards`, "POST", {
+              title: "Ungültig",
+              columnId: board.columns[0].id,
+              progress,
+            })
+          ).status,
+          400,
+        );
+        assert.equal(
+          (
+            await editor.call(`/cards/${card.id}`, "PATCH", {
+              ...card,
+              progress,
+            })
+          ).status,
+          400,
+        );
+      }
+      assert.equal(
+        (
+          await viewer.call(`/cards/${card.id}`, "PATCH", {
+            ...card,
+            progress: 100,
+          })
+        ).status,
+        403,
+      );
+      for (const progress of [0, 25, 50, 75, 100, 75]) {
+        assert.equal(
+          (
+            await editor.call(`/cards/${card.id}`, "PATCH", {
+              ...card,
+              progress,
+            })
+          ).status,
+          200,
+        );
+        board = (await viewer.call(`/boards/${board.id}`)).data;
+        card = board.cards.find((c) => c.id === card.id);
+        assert.equal(card.progress, progress);
+        assert.equal(card.checklist.filter((i) => i.done).length, 1);
+        assert.equal(card.columnId, board.columns[0].id);
+      }
+      const { progress, ...legacyUpdate } = card;
+      assert.equal(
+        (await editor.call(`/cards/${card.id}`, "PATCH", legacyUpdate)).status,
+        200,
+      );
+      board = (await viewer.call(`/boards/${board.id}`)).data;
+      card = board.cards.find((c) => c.id === card.id);
+      assert.equal(card.progress, 75);
+      const created = await editor.call(`/boards/${board.id}/cards`, "POST", {
+        title: "Standardfortschritt",
+        columnId: board.columns[0].id,
+      });
+      assert.equal(created.status, 201);
+      assert.equal(created.data.progress, 0);
+      await editor.call(`/cards/${created.data.id}`, "DELETE", {
+        version: created.data.version,
+      });
+      board = (await editor.call(`/boards/${board.id}`)).data;
+      const activity = (await editor.call(`/boards/${board.id}/activity`)).data;
+      assert.ok(
+        activity.some((a) => a.action === "Fortschritt geändert: 100 % → 75 %"),
+      );
+    },
+  );
+  await t.test(
+    "partial task saves retain other fields and return the new version",
+    async () => {
+      const before = card;
+      const saved = await editor.call(`/cards/${card.id}`, "PATCH", {
+        progress: 25,
+        version: before.version,
+      });
+      assert.equal(saved.status, 200);
+      assert.equal(saved.data.version, before.version + 1);
+      board = (await editor.call(`/boards/${board.id}`)).data;
+      card = board.cards.find((c) => c.id === before.id);
+      assert.equal(card.progress, 25);
+      for (const key of [
+        "title",
+        "description",
+        "columnId",
+        "priority",
+        "labels",
+        "checklist",
+        "dueDate",
+        "assigneeId",
+      ])
+        assert.deepEqual(card[key], before[key]);
+      assert.equal(
+        (
+          await editor.call(`/cards/${card.id}`, "PATCH", {
+            progress: 50,
+            version: before.version,
+          })
+        ).status,
+        409,
+      );
+      assert.equal(
+        (await editor.call(`/cards/${card.id}`, "PATCH", { progress: 50 }))
+          .status,
+        400,
+      );
+      assert.equal(
+        (
+          await viewer.call(`/cards/${card.id}`, "PATCH", {
+            progress: 50,
+            version: card.version,
+          })
+        ).status,
+        403,
+      );
+      assert.equal(
+        (
+          await editor.call(`/cards/${card.id}`, "PATCH", {
+            title: "",
+            version: card.version,
+          })
+        ).status,
+        400,
+      );
+      const duplicate = { id: crypto.randomUUID(), text: "Punkt", done: false };
+      assert.equal(
+        (
+          await editor.call(`/cards/${card.id}`, "PATCH", {
+            checklist: [duplicate, duplicate],
+            version: card.version,
+          })
+        ).status,
+        400,
+      );
     },
   );
   await t.test(
@@ -278,6 +481,77 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
           })
         ).status,
         403,
+      );
+    },
+  );
+  await t.test(
+    "project icons persist on creation and owner edits, retain omitted fields and reject unauthorized or invalid updates",
+    async () => {
+      assert.equal(project.icon, "code");
+      const created = await admin.call("/projects", "POST", {
+        name: "Website Icon",
+        icon: "globe",
+      });
+      assert.equal(created.status, 201);
+      assert.equal(created.data.icon, "globe");
+      const before = (await admin.call("/projects")).data.find(
+        (p) => p.id === project.id,
+      );
+      for (const user of [editor, viewer, outsider]) {
+        assert.equal(
+          (
+            await user.call(`/projects/${project.id}`, "PATCH", {
+              icon: "shield",
+            })
+          ).status,
+          403,
+        );
+      }
+      assert.equal(
+        (
+          await admin.call(`/projects/${project.id}`, "PATCH", {
+            icon: "calendar",
+          })
+        ).status,
+        200,
+      );
+      let saved = (await viewer.call("/projects")).data.find(
+        (p) => p.id === project.id,
+      );
+      assert.equal(saved.icon, "calendar");
+      assert.equal(saved.name, before.name);
+      assert.equal(saved.description, before.description);
+      assert.equal(saved.color, before.color);
+      assert.deepEqual(
+        saved.Boards.map((b) => b.id).sort(),
+        before.Boards.map((b) => b.id).sort(),
+      );
+      assert.equal(
+        (
+          await admin.call(`/projects/${project.id}`, "PATCH", {
+            description: before.description,
+          })
+        ).status,
+        200,
+      );
+      for (const icon of ["unknown", "<svg onload=alert(1)>", null, 5]) {
+        assert.equal(
+          (await admin.call("/projects", "POST", { name: "Invalid Icon", icon }))
+            .status,
+          400,
+        );
+        assert.equal(
+          (await admin.call(`/projects/${project.id}`, "PATCH", { icon })).status,
+          400,
+        );
+      }
+      saved = (await editor.call("/projects")).data.find(
+        (p) => p.id === project.id,
+      );
+      assert.equal(saved.icon, "calendar");
+      assert.equal(
+        (await admin.call(`/projects/${created.data.id}`, "DELETE")).status,
+        200,
       );
     },
   );
@@ -360,6 +634,107 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
         ).status,
         400,
       );
+    },
+  );
+  await t.test(
+    "buckets preserve cards and completion when renamed, reordered, added or removed",
+    async () => {
+      board = (await editor.call(`/boards/${board.id}`)).data;
+      const original = board.columns;
+      const existingCards = board.cards.map(({ id, columnId }) => ({
+        id,
+        columnId,
+      }));
+      // Simulate an existing installation whose JSON predates the explicit flag.
+      await Board.update(
+        { columns: original.map(({ isDone, ...c }) => c) },
+        { where: { id: board.id } },
+      );
+      const extra = {
+        id: crypto.randomUUID(),
+        name: "Wartet auf Kunden",
+        color: "#abcdef",
+      };
+      const customized = [...original].reverse().map(({ isDone, ...c }) => ({
+        ...c,
+        name: c.id === card.columnId ? "Technik" : c.name,
+      }));
+      const patch = {
+        revision: board.revision,
+        columns: [...customized, extra],
+      };
+      assert.equal(
+        (await viewer.call(`/boards/${board.id}`, "PATCH", patch)).status,
+        403,
+      );
+      assert.equal(
+        (await editor.call(`/boards/${board.id}`, "PATCH", patch)).status,
+        200,
+      );
+      assert.equal(
+        (await admin.call(`/boards/${board.id}`, "PATCH", patch)).status,
+        409,
+      );
+      board = (await viewer.call(`/boards/${board.id}`)).data;
+      assert.equal(board.columns[0].id, original.at(-1).id);
+      assert.equal(board.columns[0].isDone, true);
+      assert.equal(board.columns.at(-1).isDone, false);
+      assert.equal(board.columns.at(-1).color, "#abcdef");
+      assert.equal(
+        board.columns.find((c) => c.id === card.columnId).name,
+        "Technik",
+      );
+      assert.deepEqual(
+        board.cards.map(({ id, columnId }) => ({ id, columnId })),
+        existingCards,
+      );
+      for (const columns of [
+        [],
+        Array.from({ length: 13 }, () => ({
+          ...extra,
+          id: crypto.randomUUID(),
+        })),
+      ]) {
+        assert.equal(
+          (
+            await editor.call(`/boards/${board.id}`, "PATCH", {
+              revision: board.revision,
+              columns,
+            })
+          ).status,
+          400,
+        );
+      }
+      const revised = board.columns.map((c) => ({
+        ...c,
+        isDone: c.id === extra.id,
+      }));
+      assert.equal(
+        (
+          await editor.call(`/boards/${board.id}`, "PATCH", {
+            revision: board.revision,
+            columns: revised,
+          })
+        ).status,
+        200,
+      );
+      board = (await viewer.call(`/boards/${board.id}`)).data;
+      assert.deepEqual(
+        board.columns.filter((c) => c.isDone).map((c) => c.id),
+        [extra.id],
+      );
+      // Restore the original buckets and remove the new empty one.
+      assert.equal(
+        (
+          await editor.call(`/boards/${board.id}`, "PATCH", {
+            revision: board.revision,
+            columns: original,
+          })
+        ).status,
+        200,
+      );
+      board = (await editor.call(`/boards/${board.id}`)).data;
+      assert.deepEqual(board.columns, original);
     },
   );
   await t.test("comments are shared and recorded in activity", async () => {
@@ -511,6 +886,188 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
         ).status,
         400,
       );
+    },
+  );
+  await t.test(
+    "only administrators can change branding; public metadata contains no storage paths",
+    async () => {
+      assert.deepEqual((await anonymous.call("/public")).data.branding, {
+        name: "Projektwerk",
+        logoUrl: null,
+        logoMime: null,
+      });
+      const current = await admin.call("/admin/branding");
+      assert.equal(current.status, 200);
+      assert.equal((await anonymous.call("/admin/branding")).status, 401);
+      assert.equal((await viewer.call("/admin/branding")).status, 403);
+      assert.equal(
+        (await anonymous.call("/admin/branding", "PUT", { name: "Anonymous" }))
+          .status,
+        401,
+      );
+      assert.equal(
+        (await editor.call("/admin/branding", "PUT", { name: "Editor" })).status,
+        403,
+      );
+      const form = new FormData();
+      form.append("name", "Unauthorized upload");
+      form.append("logo", new Blob(["bad"]), "logo.png");
+      assert.equal(
+        (await viewer.call("/admin/branding", "PUT", form)).status,
+        403,
+      );
+      assert.equal(
+        (
+          await admin.call(
+            "/admin/branding",
+            "PUT",
+            { name: "Changed" },
+            { Origin: "https://evil.example" },
+          )
+        ).status,
+        403,
+      );
+      for (const body of [
+        { name: "" },
+        { name: "   " },
+        { name: "x".repeat(61) },
+        { name: "Allowed", role: "admin" },
+        { name: "Allowed", removeLogo: "unexpected" },
+      ]) {
+        assert.equal(
+          (await admin.call("/admin/branding", "PUT", body)).status,
+          400,
+        );
+      }
+      const saved = await admin.call("/admin/branding", "PUT", {
+        name: "  Unsere Planung  ",
+      });
+      assert.equal(saved.status, 200);
+      assert.equal(saved.data.name, "Unsere Planung");
+      assert.equal(
+        JSON.parse((await Setting.findByPk("branding")).value).name,
+        "Unsere Planung",
+      );
+      assert.deepEqual(
+        (await anonymous.call("/public")).data.branding,
+        saved.data,
+      );
+    },
+  );
+  await t.test(
+    "PNG, JPEG and WebP logos persist, render publicly, replace and remove without affecting names",
+    async () => {
+      const fixtures = JSON.parse(
+        await fs.readFile("tests/fixtures/logo-images.json", "utf8"),
+      );
+      let previousUrl;
+      for (const [format, encoded] of Object.entries(fixtures)) {
+        const bytes = Buffer.from(encoded, "base64");
+        const form = new FormData();
+        form.append("name", "Unsere Planung");
+        // Detect the real format independently of the supplied filename and MIME.
+        form.append(
+          "logo",
+          new Blob([bytes], { type: "application/octet-stream" }),
+          "untrusted-name.txt",
+        );
+        const saved = await admin.call("/admin/branding", "PUT", form);
+        assert.equal(saved.status, 200, JSON.stringify(saved.data));
+        assert.equal(saved.data.logoMime, `image/${format}`);
+        assert.deepEqual(Object.keys(saved.data).sort(), [
+          "logoMime",
+          "logoUrl",
+          "name",
+        ]);
+        assert.match(
+          saved.data.logoUrl,
+          /^\/api\/branding\/logo\/[a-f0-9-]{36}$/,
+        );
+        const logo = await fetch(base + saved.data.logoUrl);
+        assert.equal(logo.status, 200);
+        assert.equal(logo.headers.get("content-type"), `image/${format}`);
+        assert.equal(logo.headers.get("x-content-type-options"), "nosniff");
+        assert.equal(logo.headers.get("content-disposition"), "inline");
+        assert.deepEqual(Buffer.from(await logo.arrayBuffer()), bytes);
+        if (previousUrl)
+          assert.equal((await fetch(base + previousUrl)).status, 404);
+        previousUrl = saved.data.logoUrl;
+        const rename = await admin.call("/admin/branding", "PUT", {
+          name: "Neuer Name",
+        });
+        assert.equal(rename.data.logoUrl, saved.data.logoUrl);
+        assert.equal(
+          (await anonymous.call("/public")).data.branding.name,
+          "Neuer Name",
+        );
+        assert.equal(
+          (await fs.readdir("artifacts/test-uploads/branding")).length,
+          1,
+        );
+      }
+      const removed = await admin.call("/admin/branding", "PUT", {
+        name: "Neuer Name",
+        removeLogo: true,
+      });
+      assert.deepEqual(removed.data, {
+        name: "Neuer Name",
+        logoUrl: null,
+        logoMime: null,
+      });
+      assert.equal((await fetch(base + previousUrl)).status, 404);
+      assert.deepEqual(await fs.readdir("artifacts/test-uploads/branding"), []);
+      assert.equal(
+        (await fetch(base + "/api/branding/logo/not-a-logo")).status,
+        404,
+      );
+    },
+  );
+  await t.test(
+    "invalid, active-content and oversized logos are rejected without changing saved branding",
+    async () => {
+      const fixtures = JSON.parse(
+        await fs.readFile("tests/fixtures/logo-images.json", "utf8"),
+      );
+      const oversizedDimensions = Buffer.from(fixtures.png, "base64");
+      oversizedDimensions.writeUInt32BE(4097, 16);
+      const invalids = [
+        Buffer.from(
+          '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+        ),
+        Buffer.from("<html>bad</html>"),
+        Buffer.from(fixtures.png, "base64").subarray(0, 35),
+        oversizedDimensions,
+        Buffer.alloc(2 * 1024 * 1024 + 1),
+      ];
+      for (const bytes of invalids) {
+        const form = new FormData();
+        form.append("name", "Should not be saved");
+        form.append("logo", new Blob([bytes], { type: "image/png" }), "logo.png");
+        const response = await admin.call("/admin/branding", "PUT", form, {
+          "Accept-Language": "en",
+        });
+        assert.equal(response.status, 400);
+        assert.match(response.data.error, /logo/);
+      }
+      const conflicting = new FormData();
+      conflicting.append("name", "Should not be saved");
+      conflicting.append("removeLogo", "true");
+      conflicting.append(
+        "logo",
+        new Blob([Buffer.from(fixtures.png, "base64")]),
+        "logo.png",
+      );
+      assert.equal(
+        (await admin.call("/admin/branding", "PUT", conflicting)).status,
+        400,
+      );
+      assert.deepEqual((await anonymous.call("/public")).data.branding, {
+        name: "Neuer Name",
+        logoUrl: null,
+        logoMime: null,
+      });
+      assert.deepEqual(await fs.readdir("artifacts/test-uploads/branding"), []);
+      await admin.call("/admin/branding", "PUT", { name: "Projektwerk" });
     },
   );
   await t.test("disabled user sessions stop working immediately", async () => {
