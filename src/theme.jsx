@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { t, useLanguage } from "./i18n.js";
 import { Monitor, Moon, Sun } from "lucide-react";
 
 const storageKey = "projektwerk-theme";
@@ -57,21 +58,22 @@ export function ThemeProvider({ children }) {
 }
 
 export function ThemeControl({ floating = false }) {
+  useLanguage();
   const { preference, changePreference } = useContext(ThemeContext);
   const Icon =
     preference === "system" ? Monitor : preference === "dark" ? Moon : Sun;
   return (
     <label className={`theme-control ${floating ? "theme-floating" : ""}`}>
       <Icon size={16} aria-hidden="true" />
-      <span className="visually-hidden">Darstellung</span>
+      <span className="visually-hidden">{t("Darstellung")}</span>
       <select
-        aria-label="Darstellung"
+        aria-label={t("Darstellung")}
         value={preference}
         onChange={(event) => changePreference(event.target.value)}
       >
-        <option value="system">System</option>
-        <option value="light">Hell</option>
-        <option value="dark">Dunkel</option>
+        <option value="system">{t("System")}</option>
+        <option value="light">{t("Hell")}</option>
+        <option value="dark">{t("Dunkel")}</option>
       </select>
     </label>
   );

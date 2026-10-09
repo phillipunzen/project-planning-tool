@@ -71,12 +71,20 @@ import {
 } from "lucide-react";
 import "./styles.css";
 import { ThemeProvider, ThemeControl } from "./theme.jsx";
+import {
+  t,
+  getLocale,
+  getLanguage,
+  useLanguage,
+  setLanguagePreference,
+} from "./i18n.js";
 import { CardAutosave } from "./card-autosave.js";
 async function api(url, options = {}) {
   const response = await fetch(`/api${url}`, {
     credentials: "same-origin",
     ...options,
     headers: {
+      "Accept-Language": getLanguage(),
       ...(options.body instanceof FormData
         ? {}
         : { "Content-Type": "application/json" }),
@@ -92,7 +100,7 @@ async function api(url, options = {}) {
   const data = await response.json();
   if (!response.ok)
     throw Object.assign(
-      new Error(data.error || "Die Anfrage ist fehlgeschlagen."),
+      new Error(data.error || t("Die Anfrage ist fehlgeschlagen.")),
       { status: response.status },
     );
   return data;
@@ -132,13 +140,13 @@ const palette = [
 ];
 const shortDate = (value) =>
   value
-    ? new Date(`${value}T12:00:00`).toLocaleDateString("de-DE", {
+    ? new Date(`${value}T12:00:00`).toLocaleDateString(getLocale(), {
         day: "numeric",
         month: "short",
       })
     : "";
 const dateTime = (value) =>
-  new Date(value).toLocaleString("de-DE", {
+  new Date(value).toLocaleString(getLocale(), {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
@@ -223,7 +231,7 @@ function Modal({ title, subtitle, onClose, children, wide = false }) {
         <button
           type="button"
           className="icon-button"
-          aria-label="Schließen"
+          aria-label={t("Schließen")}
           onClick={onClose}
         >
           <X size={20} />
@@ -237,15 +245,19 @@ function FormError({ error }) {
   return error ? (
     <p className="form-error" role="alert">
       <AlertCircle size={16} />
-      {error}
+      {t(error)}
     </p>
   ) : null;
 }
 function App() {
+  useLanguage();
   const [publicInfo, setPublicInfo] = useState(null),
     [user, setUser] = useState(null),
     [loading, setLoading] = useState(true),
     [fatal, setFatal] = useState("");
+  useEffect(() => {
+    setLanguagePreference(user?.language || "system");
+  }, [user?.language, user?.id]);
   const [projects, setProjects] = useState([]),
     [projectId, setProjectId] = useState(null),
     [boardId, setBoardId] = useState(null),
@@ -302,7 +314,9 @@ function App() {
       setFatal("");
     } catch (e) {
       setFatal(
-        "Die Anwendung ist gerade nicht erreichbar. Bitte versuche es erneut.",
+        t(
+          "Die Anwendung ist gerade nicht erreichbar. Bitte versuche es erneut.",
+        ),
       );
     } finally {
       setLoading(false);
@@ -448,7 +462,7 @@ function App() {
           method: "POST",
           body: { cardId, columnId, index, revision: board.revision },
         }),
-      "Aufgabe verschoben",
+      t("Aufgabe verschoben"),
     );
   }
   if (loading)
@@ -457,7 +471,7 @@ function App() {
         <ThemeControl floating />
         <Brand />
         <Spinner />
-        <p>Dein Arbeitsbereich wird geladen …</p>
+        <p>{t("Dein Arbeitsbereich wird geladen …")}</p>
       </div>
     );
   if (fatal)
@@ -465,11 +479,11 @@ function App() {
       <div className="initial-loading">
         <ThemeControl floating />
         <Brand />
-        <Empty icon={AlertCircle} title="Verbindung unterbrochen">
+        <Empty icon={AlertCircle} title={t("Verbindung unterbrochen")}>
           {fatal}
         </Empty>
         <button className="button primary" onClick={boot}>
-          Erneut versuchen
+          {t("Erneut versuchen")}
         </button>
       </div>
     );
@@ -509,7 +523,7 @@ function App() {
       {sideOpen && (
         <button
           className="sidebar-scrim"
-          aria-label="Menü schließen"
+          aria-label={t("Menü schließen")}
           onClick={() => setSideOpen(false)}
         />
       )}
@@ -521,13 +535,13 @@ function App() {
           <Brand />
           <button
             className="icon-button mobile-only"
-            aria-label="Menü schließen"
+            aria-label={t("Menü schließen")}
             onClick={() => setSideOpen(false)}
           >
             <X size={18} />
           </button>
         </div>
-        <div className="workspace-label">DEIN ARBEITSBEREICH</div>
+        <div className="workspace-label">{t("DEIN ARBEITSBEREICH")}</div>
         <nav className="main-nav">
           <button
             className={view === "projects" ? "selected" : ""}
@@ -537,7 +551,7 @@ function App() {
             }}
           >
             <LayoutGrid size={18} />
-            Projektübersicht
+            {t("Projektübersicht")}
           </button>
           <button
             className={view === "mine" ? "selected" : ""}
@@ -547,15 +561,15 @@ function App() {
             }}
           >
             <CheckSquare size={18} />
-            Meine Aufgaben
+            {t("Meine Aufgaben")}
           </button>
         </nav>
         <div className="nav-section-heading">
-          <span>PROJEKTE</span>
+          <span>{t("PROJEKTE")}</span>
           <button
             className="icon-button"
-            title="Projekt erstellen"
-            aria-label="Projekt erstellen"
+            title={t("Projekt erstellen")}
+            aria-label={t("Projekt erstellen")}
             onClick={() => setModal({ type: "project" })}
           >
             <Plus size={16} />
@@ -580,7 +594,9 @@ function App() {
               </button>
             ))}
           {projects.filter((p) => !p.archived).length === 0 && (
-            <p className="nav-empty">Hier beginnt dein nächstes Projekt.</p>
+            <p className="nav-empty">
+              {t("Hier beginnt dein nächstes Projekt.")}
+            </p>
           )}
         </div>
         <button
@@ -588,7 +604,7 @@ function App() {
           onClick={() => setModal({ type: "project" })}
         >
           <Plus size={16} />
-          Neues Projekt
+          {t("Neues Projekt")}
         </button>
         <div className="sidebar-bottom">
           <div className="workspace-note">
@@ -596,8 +612,8 @@ function App() {
               <Layers size={16} />
             </div>
             <div>
-              <strong>Zusammen geht mehr.</strong>
-              <p>Ideen werden zu Ergebnissen.</p>
+              <strong>{t("Zusammen geht mehr.")}</strong>
+              <p>{t("Ideen werden zu Ergebnissen.")}</p>
             </div>
           </div>
           {user.role === "admin" && (
@@ -609,21 +625,28 @@ function App() {
               }}
             >
               <Settings size={17} />
-              Administration
+              {t("Administration")}
             </button>
           )}
+          <button
+            className="settings-nav"
+            onClick={() => setModal({ type: "profile" })}
+          >
+            <Users size={17} />
+            {t(" Profileinstellungen")}
+          </button>
           <div className="user-row">
             <Avatar user={user} />
             <div>
               <strong>{user.name}</strong>
               <span>
-                {user.role === "admin" ? "Administrator" : "Mitglied"}
+                {user.role === "admin" ? t("Administrator") : t("Mitglied")}
               </span>
             </div>
             <button
               className="icon-button"
-              title="Abmelden"
-              aria-label="Abmelden"
+              title={t("Abmelden")}
+              aria-label={t("Abmelden")}
               onClick={logout}
             >
               <LogOut size={17} />
@@ -636,28 +659,29 @@ function App() {
           <div className="breadcrumb">
             <button
               className="icon-button mobile-only"
-              aria-label="Menü öffnen"
+              aria-label={t("Menü öffnen")}
               aria-expanded={sideOpen}
               onClick={() => setSideOpen(true)}
             >
               <Menu size={20} />
             </button>
-            <span>Arbeitsbereich</span>
+            <span>{t("Arbeitsbereich")}</span>
             <ChevronRight size={14} />
             <strong>
               {view === "admin"
-                ? "Administration"
+                ? t("Administration")
                 : view === "projects"
-                  ? "Projekte"
+                  ? t("Projekte")
                   : view === "mine"
-                    ? "Meine Aufgaben"
-                    : project?.name || "Projekte"}
+                    ? t("Meine Aufgaben")
+                    : project?.name || t("Projekte")}
             </strong>
           </div>
           <div className="topbar-right">
             <ThemeControl />
             <span className="connection-status">
-              <i /> Gemeinsam planen
+              <i />
+              {t(" Gemeinsam planen")}
             </span>
             <Avatar user={user} size="small" />
           </div>
@@ -690,9 +714,9 @@ function App() {
                 <div className="project-heading-top">
                   <div className="project-title-group">
                     <ProjectIcon project={project} />
-                    <span className="eyebrow">PROJEKT</span>
+                    <span className="eyebrow">{t("PROJEKT")}</span>
                     {project.archived && (
-                      <span className="badge gray">Archiviert</span>
+                      <span className="badge gray">{t("Archiviert")}</span>
                     )}
                   </div>
                   <div className="project-heading-actions">
@@ -706,13 +730,13 @@ function App() {
                       onClick={() => setModal({ type: "members" })}
                     >
                       <Users size={16} />
-                      {isOwner ? "Einladen" : "Mitglieder"}
+                      {isOwner ? t("Einladen") : t("Mitglieder")}
                     </button>
                     {isOwner && (
                       <button
                         className="icon-button bordered"
-                        title="Projekteinstellungen"
-                        aria-label="Projekteinstellungen"
+                        title={t("Projekteinstellungen")}
+                        aria-label={t("Projekteinstellungen")}
                         onClick={() => setModal({ type: "project", project })}
                       >
                         <MoreHorizontal size={20} />
@@ -723,26 +747,32 @@ function App() {
                 <h1>{project.name}</h1>
                 <p className="project-description">
                   {project.description ||
-                    "Alle Aufgaben im Blick. Gemeinsam den nächsten Schritt machen."}
+                    t(
+                      "Alle Aufgaben im Blick. Gemeinsam den nächsten Schritt machen.",
+                    )}
                 </p>
                 <div className="project-meta">
                   <span>
                     <Layers size={14} />
                     {project.Boards.length}{" "}
-                    {project.Boards.length === 1 ? "Board" : "Boards"}
+                    {project.Boards.length === 1 ? t("Board") : t("Boards")}
                   </span>
                   <span className="meta-divider" />
                   <span>
                     <Users size={14} />
                     {members.length}{" "}
-                    {members.length === 1 ? "Mitglied" : "Mitglieder"}
+                    {members.length === 1 ? t("Mitglied") : t("Mitglieder")}
                   </span>
                   <span className="meta-divider" />
                   <span>
                     <CheckCircle2 size={14} />
                     {board
-                      ? `${board.cards.filter((c) => cardIsDone(board, c)).length} von ${board.cards.length} Aufgaben erledigt`
-                      : "Board wird geladen"}
+                      ? t("{0} von {1} Aufgaben erledigt", [
+                          board.cards.filter((c) => cardIsDone(board, c))
+                            .length,
+                          board.cards.length,
+                        ])
+                      : t("Board wird geladen")}
                   </span>
                 </div>
               </section>
@@ -753,26 +783,26 @@ function App() {
                     onClick={() => setSubview("kanban")}
                   >
                     <LayoutGrid size={16} />
-                    Board
+                    {t("Board")}
                   </button>
                   <button
                     className={subview === "list" ? "active" : ""}
                     onClick={() => setSubview("list")}
                   >
                     <List size={16} />
-                    Liste
+                    {t("Liste")}
                   </button>
                   <button
                     className={subview === "activity" ? "active" : ""}
                     onClick={() => setSubview("activity")}
                   >
                     <Clock size={16} />
-                    Aktivität
+                    {t("Aktivität")}
                   </button>
                 </div>
                 <div className="board-picker">
                   <select
-                    aria-label="Board auswählen"
+                    aria-label={t("Board auswählen")}
                     value={boardId || ""}
                     onChange={(e) => setBoardId(e.target.value)}
                   >
@@ -785,8 +815,8 @@ function App() {
                   {canEdit && (
                     <button
                       className="icon-button"
-                      title="Board hinzufügen"
-                      aria-label="Board hinzufügen"
+                      title={t("Board hinzufügen")}
+                      aria-label={t("Board hinzufügen")}
                       onClick={() => setModal({ type: "board" })}
                     >
                       <Plus size={16} />
@@ -800,15 +830,15 @@ function App() {
                     <label className="search-field">
                       <Search size={17} />
                       <input
-                        aria-label="Aufgaben suchen"
-                        placeholder="Aufgaben suchen …"
+                        aria-label={t("Aufgaben suchen")}
+                        placeholder={t("Aufgaben suchen …")}
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                       />
                       {search && (
                         <button
                           className="icon-button"
-                          aria-label="Suche löschen"
+                          aria-label={t("Suche löschen")}
                           onClick={() => setSearch("")}
                         >
                           <X size={14} />
@@ -818,14 +848,14 @@ function App() {
                     <label className="filter-select">
                       <SlidersHorizontal size={15} />
                       <select
-                        aria-label="Priorität filtern"
+                        aria-label={t("Priorität filtern")}
                         value={priorityFilter}
                         onChange={(e) => setPriorityFilter(e.target.value)}
                       >
-                        <option value="all">Alle Prioritäten</option>
+                        <option value="all">{t("Alle Prioritäten")}</option>
                         {Object.entries(priorities).map(([key, p]) => (
                           <option key={key} value={key}>
-                            {p.label}
+                            {t(p.label)}
                           </option>
                         ))}
                       </select>
@@ -835,18 +865,18 @@ function App() {
                       onClick={() => setMineFilter(!mineFilter)}
                     >
                       <Avatar user={user} size="tiny" />
-                      Meine Aufgaben
+                      {t("Meine Aufgaben")}
                     </button>
                   </div>
                   <div className="toolbar-right">
                     {board && canEdit && (
                       <button
                         className="button secondary"
-                        aria-label="Buckets bearbeiten"
+                        aria-label={t("Buckets bearbeiten")}
                         onClick={() => setModal({ type: "columns" })}
                       >
                         <Settings size={17} />
-                        Buckets bearbeiten
+                        {t("Buckets bearbeiten")}
                       </button>
                     )}
                     {canEdit && (
@@ -861,7 +891,7 @@ function App() {
                         }
                       >
                         <Plus size={17} />
-                        Aufgabe erstellen
+                        {t("Aufgabe erstellen")}
                       </button>
                     )}
                   </div>
@@ -869,20 +899,20 @@ function App() {
               )}
               {loadError ? (
                 <div className="board-content">
-                  <Empty icon={AlertCircle} title="Board nicht verfügbar">
+                  <Empty icon={AlertCircle} title={t("Board nicht verfügbar")}>
                     {loadError}
                   </Empty>
                   <button
                     className="button secondary"
                     onClick={() => refreshBoard()}
                   >
-                    Erneut laden
+                    {t("Erneut laden")}
                   </button>
                 </div>
               ) : !board ? (
                 <div className="board-content loading-board">
                   <Spinner />
-                  <span>Board wird geladen …</span>
+                  <span>{t("Board wird geladen …")}</span>
                 </div>
               ) : subview === "activity" ? (
                 <ActivityView activities={activity} />
@@ -904,30 +934,46 @@ function App() {
               )}
               <div className="board-footer">
                 <span>
-                  <span className="live-dot" /> Änderungen werden alle 5
-                  Sekunden synchronisiert
+                  <span className="live-dot" />
+                  {t(" Änderungen werden alle 5 Sekunden synchronisiert")}
                 </span>
                 <span>
-                  Karten am Griff ziehen · Touch & Tastatur unterstützt
+                  {t("Karten am Griff ziehen · Touch & Tastatur unterstützt")}
                 </span>
               </div>
             </>
           ) : (
             <div className="page-content">
-              <Empty icon={FolderOpen} title="Platz für dein nächstes Projekt">
-                Lege ein Projekt an, lade dein Team ein und bringt eure Ideen
-                gemeinsam voran.
+              <Empty
+                icon={FolderOpen}
+                title={t("Platz für dein nächstes Projekt")}
+              >
+                {t(
+                  "Lege ein Projekt an, lade dein Team ein und bringt eure Ideen gemeinsam voran.",
+                )}
               </Empty>
               <button
                 className="button primary"
                 onClick={() => setModal({ type: "project" })}
               >
                 <Plus size={17} />
-                Erstes Projekt erstellen
+                {t("Erstes Projekt erstellen")}
               </button>
             </div>
           ))}
       </main>
+      {modal?.type === "profile" && (
+        <ProfileModal
+          user={user}
+          onClose={() => setModal(null)}
+          onSaved={(updated) => {
+            setLanguagePreference(updated.language);
+            setUser(updated);
+            setModal(null);
+            notify(t("Profil gespeichert"));
+          }}
+        />
+      )}
       {modal?.type === "project" && (
         <ProjectModal
           project={modal.project}
@@ -936,14 +982,14 @@ function App() {
             await reloadProjects();
             selectProject(id);
             setModal(null);
-            notify("Projekt gespeichert");
+            notify(t("Projekt gespeichert"));
           }}
           onDeleted={async () => {
             await reloadProjects();
             setProjectId(null);
             setModal(null);
             setView("projects");
-            notify("Projekt gelöscht");
+            notify(t("Projekt gelöscht"));
           }}
         />
       )}
@@ -955,7 +1001,7 @@ function App() {
             await reloadProjects();
             setBoardId(b.id);
             setModal(null);
-            notify("Board erstellt");
+            notify(t("Board erstellt"));
           }}
         />
       )}
@@ -966,7 +1012,7 @@ function App() {
           onSaved={async () => {
             await refreshBoard();
             setModal(null);
-            notify("Buckets gespeichert");
+            notify(t("Buckets gespeichert"));
           }}
         />
       )}
@@ -986,7 +1032,7 @@ function App() {
           onSaved={async () => {
             setModal(null);
             await refreshBoard();
-            notify("Aufgabe gespeichert");
+            notify(t("Aufgabe gespeichert"));
           }}
           notify={notify}
         />
@@ -1005,10 +1051,10 @@ function App() {
       {toast && (
         <div className={`toast ${toast.error ? "error" : ""}`} role="status">
           {toast.error ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
-          <span>{toast.message}</span>
+          <span>{t(toast.message)}</span>
           <button
             className="icon-button"
-            aria-label="Meldung schließen"
+            aria-label={t("Meldung schließen")}
             onClick={() => setToast(null)}
           >
             <X size={15} />
@@ -1027,10 +1073,74 @@ function Brand() {
         <i />
       </span>
       <span>
-        projekt<span>werk</span>
-        <em>·</em>
+        {t("projekt")}
+        <span>{t("werk")}</span>
+        <em>{"·"}</em>
       </span>
     </div>
+  );
+}
+function ProfileModal({ user, onClose, onSaved }) {
+  const [language, setLanguage] = useState(user.language || "system");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const updated = await api("/me", { method: "PATCH", body: { language } });
+      onSaved(updated);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal
+      title={t("Profileinstellungen")}
+      subtitle={t("Deine persönlichen Einstellungen für alle Geräte.")}
+      onClose={onClose}
+    >
+      <form onSubmit={submit}>
+        <label>
+          {t("Name")}
+          <input value={user.name} readOnly />
+        </label>
+        <label>
+          {t("E-Mail-Adresse")}
+          <input value={user.email} readOnly />
+        </label>
+        <label>
+          {t("Sprache")}
+          <select
+            aria-label={t("Sprache")}
+            value={language}
+            disabled={busy}
+            onChange={(e) => setLanguage(e.target.value)}
+          >
+            <option value="system">{t("Automatisch (Browsersprache)")}</option>
+            <option value="de">{t("Deutsch")}</option>
+            <option value="en">{t("English")}</option>
+          </select>
+        </label>
+        <p className="bucket-note">
+          {t(
+            "Die Auswahl wird in deinem Benutzerprofil gespeichert. Bei „Automatisch“ wird die erste unterstützte Browsersprache verwendet.",
+          )}
+        </p>
+        <FormError error={error} />
+        <div className="modal-actions">
+          <button type="button" className="button secondary" onClick={onClose}>
+            {t("Abbrechen")}
+          </button>
+          <button className="button primary" disabled={busy}>
+            {busy ? <Spinner /> : t("Speichern")}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 function AuthScreen({ info, onSuccess, invitation = null, token }) {
@@ -1075,30 +1185,31 @@ function AuthScreen({ info, onSuccess, invitation = null, token }) {
       <div className="auth-story">
         <Brand />
         <div className="auth-copy">
-          <span className="auth-eyebrow">VON DER IDEE ZUM ERGEBNIS</span>
+          <span className="auth-eyebrow">{t("VON DER IDEE ZUM ERGEBNIS")}</span>
           <h1>
-            Gute Projekte.
+            {t("Gute Projekte.")}
             <br />
-            Starke Teams.
+            {t("Starke Teams.")}
             <br />
-            <span>Ein gemeinsamer Ort.</span>
+            <span>{t("Ein gemeinsamer Ort.")}</span>
           </h1>
           <p>
-            Plane Aufgaben, teile Ideen und behalte den Überblick. So einfach
-            kann Zusammenarbeit sein.
+            {t(
+              "Plane Aufgaben, teile Ideen und behalte den Überblick. So einfach kann Zusammenarbeit sein.",
+            )}
           </p>
           <div className="auth-benefits">
             <span>
               <CheckCircle2 size={18} />
-              Alle Projekte im Blick
+              {t("Alle Projekte im Blick")}
             </span>
             <span>
               <CheckCircle2 size={18} />
-              Gemeinsam vorankommen
+              {t("Gemeinsam vorankommen")}
             </span>
             <span>
               <CheckCircle2 size={18} />
-              Auf jedem Gerät zu Hause
+              {t("Auf jedem Gerät zu Hause")}
             </span>
           </div>
         </div>
@@ -1121,7 +1232,9 @@ function AuthScreen({ info, onSuccess, invitation = null, token }) {
             <Check size={26} />
           </div>
         </div>
-        <span className="auth-footnote">Für Teams, die etwas bewegen.</span>
+        <span className="auth-footnote">
+          {t("Für Teams, die etwas bewegen.")}
+        </span>
       </div>
       <div className="auth-form-panel">
         <div className="auth-form">
@@ -1129,15 +1242,23 @@ function AuthScreen({ info, onSuccess, invitation = null, token }) {
             <Brand />
           </div>
           <span className="eyebrow">
-            {setup ? "DEIN NEUER ARBEITSBEREICH" : "WILLKOMMEN ZURÜCK"}
+            {setup ? t("DEIN NEUER ARBEITSBEREICH") : t("WILLKOMMEN ZURÜCK")}
           </span>
-          <h2>{setup ? "Lass uns loslegen." : "Schön, dass du da bist."}</h2>
+          <h2>
+            {setup ? t("Lass uns loslegen.") : t("Schön, dass du da bist.")}
+          </h2>
           <p>
             {setup
-              ? "Erstelle dein Administratorkonto und starte dein erstes Projekt."
+              ? t(
+                  "Erstelle dein Administratorkonto und starte dein erstes Projekt.",
+                )
               : invitation
-                ? `Melde dich an, um „${invitation.project}“ beizutreten.`
-                : "Melde dich an und mach dort weiter, wo du aufgehört hast."}
+                ? t("Melde dich an, um „{0}“ beizutreten.", [
+                    invitation.project,
+                  ])
+                : t(
+                    "Melde dich an und mach dort weiter, wo du aufgehört hast.",
+                  )}
           </p>
           {!setup && info.provider === "oidc" && (
             <>
@@ -1150,7 +1271,7 @@ function AuthScreen({ info, onSuccess, invitation = null, token }) {
                 <ArrowRight size={16} />
               </a>
               <div className="form-divider">
-                <span>oder mit lokalem Konto</span>
+                <span>{t("oder mit lokalem Konto")}</span>
               </div>
             </>
           )}
@@ -1160,23 +1281,23 @@ function AuthScreen({ info, onSuccess, invitation = null, token }) {
                 className={method === "ldap" ? "active" : ""}
                 onClick={() => setMethod("ldap")}
               >
-                Active Directory
+                {t("Active Directory")}
               </button>
               <button
                 className={method === "local" ? "active" : ""}
                 onClick={() => setMethod("local")}
               >
-                Lokales Konto
+                {t("Lokales Konto")}
               </button>
             </div>
           )}
           <form onSubmit={submit}>
             {setup && (
               <label>
-                Dein Name
+                {t("Dein Name")}
                 <input
                   name="name"
-                  placeholder="Vorname Nachname"
+                  placeholder={t("Vorname Nachname")}
                   required
                   maxLength={100}
                   autoComplete="name"
@@ -1194,7 +1315,7 @@ function AuthScreen({ info, onSuccess, invitation = null, token }) {
                   type={method === "ldap" && !setup ? "text" : "email"}
                   placeholder={
                     method === "ldap" && !setup
-                      ? "Dein Benutzername"
+                      ? t("Dein Benutzername")
                       : "du@unternehmen.de"
                   }
                   defaultValue={invitation?.email}
@@ -1204,7 +1325,7 @@ function AuthScreen({ info, onSuccess, invitation = null, token }) {
               </div>
             </label>
             <label>
-              Passwort
+              {t("Passwort")}
               <div className="input-with-icon">
                 <Lock size={17} />
                 <input
@@ -1214,7 +1335,7 @@ function AuthScreen({ info, onSuccess, invitation = null, token }) {
                   minLength={setup ? 10 : 1}
                   maxLength={setup ? 72 : 200}
                   placeholder={
-                    setup ? "Mindestens 10 Zeichen" : "Dein Passwort"
+                    setup ? t("Mindestens 10 Zeichen") : t("Dein Passwort")
                   }
                   autoComplete={setup ? "new-password" : "current-password"}
                 />
@@ -1223,7 +1344,7 @@ function AuthScreen({ info, onSuccess, invitation = null, token }) {
             {setup && (
               <label className="checkbox-label">
                 <input type="checkbox" name="sample" defaultChecked />
-                <span>Mit einem Beispielprojekt starten</span>
+                <span>{t("Mit einem Beispielprojekt starten")}</span>
               </label>
             )}
             <FormError error={error} />
@@ -1231,9 +1352,9 @@ function AuthScreen({ info, onSuccess, invitation = null, token }) {
               {busy ? (
                 <Spinner />
               ) : setup ? (
-                "Arbeitsbereich erstellen"
+                t("Arbeitsbereich erstellen")
               ) : (
-                "Anmelden"
+                t("Anmelden")
               )}
               {!busy && <ArrowRight size={17} />}
             </button>
@@ -1242,13 +1363,15 @@ function AuthScreen({ info, onSuccess, invitation = null, token }) {
             <Shield size={15} />
             <span>
               {setup
-                ? "Dein Konto verwaltet Projekte, Mitglieder und Anmeldeanbieter."
-                : "Dein Zugang wird von deinem Administrator verwaltet."}
+                ? t(
+                    "Dein Konto verwaltet Projekte, Mitglieder und Anmeldeanbieter.",
+                  )
+                : t("Dein Zugang wird von deinem Administrator verwaltet.")}
             </span>
           </div>
         </div>
         <span className="login-bottom">
-          Projektwerk · Gemeinsam mehr bewegen
+          {t("Projektwerk · Gemeinsam mehr bewegen")}
         </span>
       </div>
     </div>
@@ -1301,12 +1424,14 @@ function InviteScreen({ token, user, publicInfo, onLogin, onDone }) {
         <div className="invitation-illustration">
           <Users size={34} />
         </div>
-        <span className="eyebrow">GEMEINSAM GEHT MEHR</span>
-        <h1>Du bist eingeladen.</h1>
+        <span className="eyebrow">{t("GEMEINSAM GEHT MEHR")}</span>
+        <h1>{t("Du bist eingeladen.")}</h1>
         {info ? (
           <>
             <p>
-              Werde Teil von <strong>{info.project}</strong>.
+              {t("Werde Teil von ")}
+              <strong>{info.project}</strong>
+              {"."}
             </p>
             <div className="invitation-details">
               <span>
@@ -1315,23 +1440,28 @@ function InviteScreen({ token, user, publicInfo, onLogin, onDone }) {
               </span>
               <span>
                 <Shield size={16} />
-                {roleNames[info.role]}
+                {t(roleNames[info.role])}
               </span>
             </div>
             {user ? (
               <>
-                <p>Angemeldet als {user.email}</p>
+                <p>
+                  {t("Angemeldet als ")}
+                  {user.email}
+                </p>
                 <button
                   className="button primary full"
                   disabled={busy || user.email !== info.email}
                   onClick={() => accept()}
                 >
-                  {busy ? <Spinner /> : "Projekt beitreten"}
+                  {busy ? <Spinner /> : t("Projekt beitreten")}
                   <ArrowRight size={17} />
                 </button>
                 {user.email !== info.email && (
                   <p className="form-error">
-                    Bitte melde dich zuerst mit dem eingeladenen Konto an.
+                    {t(
+                      "Bitte melde dich zuerst mit dem eingeladenen Konto an.",
+                    )}
                   </p>
                 )}
               </>
@@ -1339,7 +1469,7 @@ function InviteScreen({ token, user, publicInfo, onLogin, onDone }) {
               <>
                 <form onSubmit={accept}>
                   <label>
-                    Dein Name
+                    {t("Dein Name")}
                     <input
                       name="name"
                       autoComplete="name"
@@ -1348,7 +1478,7 @@ function InviteScreen({ token, user, publicInfo, onLogin, onDone }) {
                     />
                   </label>
                   <label>
-                    Neues Passwort
+                    {t("Neues Passwort")}
                     <input
                       name="password"
                       type="password"
@@ -1356,11 +1486,11 @@ function InviteScreen({ token, user, publicInfo, onLogin, onDone }) {
                       required
                       minLength={10}
                       maxLength={72}
-                      placeholder="Mindestens 10 Zeichen"
+                      placeholder={t("Mindestens 10 Zeichen")}
                     />
                   </label>
                   <button className="button primary full" disabled={busy}>
-                    {busy ? <Spinner /> : "Konto erstellen & beitreten"}
+                    {busy ? <Spinner /> : t("Konto erstellen & beitreten")}
                     <ArrowRight size={17} />
                   </button>
                 </form>
@@ -1368,7 +1498,7 @@ function InviteScreen({ token, user, publicInfo, onLogin, onDone }) {
                   className="text-button full"
                   onClick={() => setLogin(true)}
                 >
-                  Bereits ein Konto oder Firmenanmeldung? Anmelden
+                  {t("Bereits ein Konto oder Firmenanmeldung? Anmelden")}
                 </button>
               </>
             )}
@@ -1378,7 +1508,7 @@ function InviteScreen({ token, user, publicInfo, onLogin, onDone }) {
         ) : null}
         <FormError error={error} />
         <a className="text-button" href="/">
-          Zum Arbeitsbereich
+          {t("Zum Arbeitsbereich")}
         </a>
       </div>
     </div>
@@ -1422,10 +1552,13 @@ function TaskCard({
         </p>
       )}
       <div className="card-completion">
-        <span>Fortschritt</span>
-        <strong>{card.progress ?? 0} %</strong>
+        <span>{t("Fortschritt")}</span>
+        <strong>
+          {card.progress ?? 0}
+          {" %"}
+        </strong>
         <progress
-          aria-label={`Fortschritt: ${card.title}`}
+          aria-label={t("Fortschritt: {0}", [card.title])}
           max={100}
           value={card.progress ?? 0}
         />
@@ -1433,21 +1566,23 @@ function TaskCard({
       {total > 0 && (
         <div
           className="card-progress"
-          title={`${done} von ${total} Checklistenpunkten erledigt`}
+          title={t("{0} von {1} Checklistenpunkten erledigt", [done, total])}
         >
           <div>
             <i style={{ width: `${(done / total) * 100}%` }} />
           </div>
           <span>
             <CheckSquare size={12} />
-            {done}/{total}
+            {done}
+            {"/"}
+            {total}
           </span>
         </div>
       )}
       <div className="card-details">
         <span className={`priority priority-${p.color}`}>
           <Flag size={11} />
-          {p.label}
+          {t(p.label)}
         </span>
         {card.dueDate && (
           <span className={`due-date ${overdue ? "overdue" : ""}`}>
@@ -1459,25 +1594,25 @@ function TaskCard({
       <div className="card-bottom">
         <div className="card-counts">
           {card.commentCount > 0 && (
-            <span title="Kommentare">
+            <span title={t("Kommentare")}>
               <MessageSquare size={13} />
               {card.commentCount}
             </span>
           )}
           {card.attachmentCount > 0 && (
-            <span title="Anhänge">
+            <span title={t("Anhänge")}>
               <Paperclip size={13} />
               {card.attachmentCount}
             </span>
           )}
           {!card.commentCount && !card.attachmentCount && (
-            <span className="card-id">Aufgabe</span>
+            <span className="card-id">{t("Aufgabe")}</span>
           )}
         </div>
         {card.assignee ? (
           <Avatar user={card.assignee} size="tiny" />
         ) : (
-          <span className="unassigned" title="Noch nicht zugewiesen">
+          <span className="unassigned" title={t("Noch nicht zugewiesen")}>
             <Users size={12} />
           </span>
         )}
@@ -1513,7 +1648,7 @@ function SortableCard({ card, onOpen, canEdit }) {
             className="drag-handle"
             {...attributes}
             {...listeners}
-            aria-label={`Aufgabe ${card.title} verschieben`}
+            aria-label={t("Aufgabe {0} verschieben", [card.title])}
           >
             <GripVertical size={15} />
           </button>
@@ -1538,7 +1673,7 @@ function Column({ column, cards, onOpen, onAdd, canEdit }) {
         {canEdit && (
           <button
             className="icon-button"
-            aria-label={`Aufgabe in ${column.name} erstellen`}
+            aria-label={t("Aufgabe in {0} erstellen", [column.name])}
             onClick={() => onAdd(column.id)}
           >
             <Plus size={17} />
@@ -1559,14 +1694,16 @@ function Column({ column, cards, onOpen, onAdd, canEdit }) {
             />
           ))}
           {cards.length === 0 && (
-            <div className="column-empty">Platz für den nächsten Schritt</div>
+            <div className="column-empty">
+              {t("Platz für den nächsten Schritt")}
+            </div>
           )}
         </div>
       </SortableContext>
       {canEdit && (
         <button className="column-add" onClick={() => onAdd(column.id)}>
           <Plus size={15} />
-          Aufgabe hinzufügen
+          {t("Aufgabe hinzufügen")}
         </button>
       )}
     </section>
@@ -1621,8 +1758,9 @@ function Kanban({ board, cards, canEdit, onMove, onOpen, onAdd }) {
       onDragCancel={() => setActive(null)}
       accessibility={{
         screenReaderInstructions: {
-          draggable:
+          draggable: t(
             "Leertaste drücken, mit Pfeiltasten verschieben und erneut Leertaste zum Ablegen drücken. Escape bricht ab.",
+          ),
         },
       }}
     >
@@ -1651,12 +1789,12 @@ function TaskList({ cards, board, onOpen }) {
       <table className="task-table">
         <thead>
           <tr>
-            <th>Aufgabe</th>
-            <th>Status</th>
-            <th>Fortschritt</th>
-            <th>Priorität</th>
-            <th>Fällig am</th>
-            <th>Verantwortlich</th>
+            <th>{t("Aufgabe")}</th>
+            <th>{t("Status")}</th>
+            <th>{t("Fortschritt")}</th>
+            <th>{t("Priorität")}</th>
+            <th>{t("Fällig am")}</th>
+            <th>{t("Verantwortlich")}</th>
           </tr>
         </thead>
         <tbody>
@@ -1666,8 +1804,10 @@ function TaskList({ cards, board, onOpen }) {
                 <button className="table-title">{c.title}</button>
                 {c.checklist?.length > 0 && (
                   <small>
-                    {c.checklist.filter((i) => i.done).length}/
-                    {c.checklist.length} erledigt
+                    {c.checklist.filter((i) => i.done).length}
+                    {"/"}
+                    {c.checklist.length}
+                    {t(" erledigt")}
                   </small>
                 )}
               </td>
@@ -1683,12 +1823,15 @@ function TaskList({ cards, board, onOpen }) {
                   {board.columns.find((col) => col.id === c.columnId)?.name}
                 </span>
               </td>
-              <td>{c.progress ?? 0} %</td>
+              <td>
+                {c.progress ?? 0}
+                {" %"}
+              </td>
               <td>
                 <span
                   className={`priority priority-${priorities[c.priority].color}`}
                 >
-                  {priorities[c.priority].label}
+                  {t(priorities[c.priority].label)}
                 </span>
               </td>
               <td>{shortDate(c.dueDate) || "—"}</td>
@@ -1707,8 +1850,8 @@ function TaskList({ cards, board, onOpen }) {
         </tbody>
       </table>
       {cards.length === 0 && (
-        <Empty title="Keine passenden Aufgaben">
-          Passe deine Filter an oder erstelle eine neue Aufgabe.
+        <Empty title={t("Keine passenden Aufgaben")}>
+          {t("Passe deine Filter an oder erstelle eine neue Aufgabe.")}
         </Empty>
       )}
     </div>
@@ -1718,8 +1861,8 @@ function ActivityView({ activities }) {
   return (
     <div className="activity-page">
       <div className="section-heading">
-        <h2>Was sich bewegt hat</h2>
-        <p>Die letzten 100 Änderungen in diesem Board.</p>
+        <h2>{t("Was sich bewegt hat")}</h2>
+        <p>{t("Die letzten 100 Änderungen in diesem Board.")}</p>
       </div>
       {activities.length ? (
         activities.map((a) => (
@@ -1728,7 +1871,7 @@ function ActivityView({ activities }) {
             <div>
               <p>
                 <strong>{a.User?.name}</strong>{" "}
-                <span>{a.action.toLowerCase()}</span>
+                <span>{t(a.action).toLowerCase()}</span>
               </p>
               {a.cardTitle && (
                 <span className="activity-card-title">{a.cardTitle}</span>
@@ -1738,9 +1881,10 @@ function ActivityView({ activities }) {
           </div>
         ))
       ) : (
-        <Empty icon={Clock} title="Hier entsteht eure Geschichte">
-          Sobald ihr Aufgaben erstellt, kommentiert oder verschiebt, erscheinen
-          die Änderungen hier.
+        <Empty icon={Clock} title={t("Hier entsteht eure Geschichte")}>
+          {t(
+            "Sobald ihr Aufgaben erstellt, kommentiert oder verschiebt, erscheinen die Änderungen hier.",
+          )}
         </Empty>
       )}
     </div>
@@ -1751,32 +1895,33 @@ function ProjectOverview({ projects, onSelect, onCreate }) {
     <div className="page-content">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">DEIN ARBEITSBEREICH</span>
-          <h1>Alles beginnt mit einer Idee.</h1>
-          <p>Deine Projekte. Dein Team. Euer nächster Schritt.</p>
+          <span className="eyebrow">{t("DEIN ARBEITSBEREICH")}</span>
+          <h1>{t("Alles beginnt mit einer Idee.")}</h1>
+          <p>{t("Deine Projekte. Dein Team. Euer nächster Schritt.")}</p>
         </div>
         <button className="button primary" onClick={onCreate}>
           <Plus size={17} />
-          Neues Projekt
+          {t("Neues Projekt")}
         </button>
       </div>
       <div className="overview-stats">
         <div>
-          <span>Projekte</span>
+          <span>{t("Projekte")}</span>
           <strong>{projects.filter((p) => !p.archived).length}</strong>
         </div>
         <div>
-          <span>Boards</span>
+          <span>{t("Boards")}</span>
           <strong>{projects.reduce((n, p) => n + p.Boards.length, 0)}</strong>
         </div>
         <div>
-          <span>Archiviert</span>
+          <span>{t("Archiviert")}</span>
           <strong>{projects.filter((p) => p.archived).length}</strong>
         </div>
       </div>
       <div className="section-heading">
         <h2>
-          Deine Projekte <span className="number-badge">{projects.length}</span>
+          {t("Deine Projekte ")}
+          <span className="number-badge">{projects.length}</span>
         </h2>
       </div>
       <div className="project-grid">
@@ -1793,15 +1938,16 @@ function ProjectOverview({ projects, onSelect, onCreate }) {
             <h3>{p.name}</h3>
             <p>
               {p.description ||
-                "Ein neuer Ort für gemeinsame Ideen und Aufgaben."}
+                t("Ein neuer Ort für gemeinsame Ideen und Aufgaben.")}
             </p>
             <div className="project-tile-footer">
               <span>
                 <Layers size={14} />
-                {p.Boards.length} Boards
+                {p.Boards.length}
+                {t(" Boards")}
               </span>
               <span className="badge gray">
-                {p.archived ? "Archiviert" : roleNames[p.myRole]}
+                {p.archived ? t("Archiviert") : t(roleNames[p.myRole])}
               </span>
             </div>
           </button>
@@ -1810,8 +1956,8 @@ function ProjectOverview({ projects, onSelect, onCreate }) {
           <span>
             <Plus size={24} />
           </span>
-          <h3>Etwas Neues starten</h3>
-          <p>Erstelle ein Projekt und bring dein Team zusammen.</p>
+          <h3>{t("Etwas Neues starten")}</h3>
+          <p>{t("Erstelle ein Projekt und bring dein Team zusammen.")}</p>
         </button>
       </div>
     </div>
@@ -1848,17 +1994,17 @@ function MyTasks({ projects, user, onSelect }) {
     <div className="page-content">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">DEIN FOKUS</span>
-          <h1>Meine Aufgaben</h1>
-          <p>Was als Nächstes ansteht – über alle Projekte hinweg.</p>
+          <span className="eyebrow">{t("DEIN FOKUS")}</span>
+          <h1>{t("Meine Aufgaben")}</h1>
+          <p>{t("Was als Nächstes ansteht – über alle Projekte hinweg.")}</p>
         </div>
       </div>
       <FormError error={error} />
       {groups === null ? (
         <Spinner />
       ) : !groups.length ? (
-        <Empty icon={CheckCircle2} title="Alles im grünen Bereich">
-          Dir sind gerade keine offenen Aufgaben zugewiesen.
+        <Empty icon={CheckCircle2} title={t("Alles im grünen Bereich")}>
+          {t("Dir sind gerade keine offenen Aufgaben zugewiesen.")}
         </Empty>
       ) : (
         groups.map((g) => (
@@ -1866,13 +2012,18 @@ function MyTasks({ projects, user, onSelect }) {
             <div className="section-heading">
               <h2>
                 <ProjectIcon project={g.project} />
-                {g.project.name} <span className="muted">/ {g.board.name}</span>
+                {g.project.name}{" "}
+                <span className="muted">
+                  {"/ "}
+                  {g.board.name}
+                </span>
               </h2>
               <button
                 className="text-button"
                 onClick={() => onSelect(g.project.id, g.board.id)}
               >
-                Zum Board <ArrowRight size={15} />
+                {t("Zum Board ")}
+                <ArrowRight size={15} />
               </button>
             </div>
             <TaskList
@@ -1929,38 +2080,38 @@ function ProjectModal({ project, onClose, onSaved, onDeleted }) {
   }
   return (
     <Modal
-      title={project ? "Projekteinstellungen" : "Ein neues Kapitel."}
+      title={project ? t("Projekteinstellungen") : t("Ein neues Kapitel.")}
       subtitle={
         project
-          ? "Passe dein Projekt an."
-          : "Gib deiner Idee einen gemeinsamen Platz."
+          ? t("Passe dein Projekt an.")
+          : t("Gib deiner Idee einen gemeinsamen Platz.")
       }
       onClose={onClose}
     >
       <form onSubmit={submit}>
         <label>
-          Projektname
+          {t("Projektname")}
           <input
             name="name"
             defaultValue={project?.name}
             required
             maxLength={100}
-            placeholder="z. B. Website-Relaunch"
+            placeholder={t("z. B. Website-Relaunch")}
             autoFocus
           />
         </label>
         <label>
-          Beschreibung
+          {t("Beschreibung")}
           <textarea
             name="description"
             defaultValue={project?.description}
             maxLength={5000}
             rows={3}
-            placeholder="Was möchtet ihr gemeinsam erreichen?"
+            placeholder={t("Was möchtet ihr gemeinsam erreichen?")}
           />
         </label>
         <label>
-          Projektfarbe
+          {t("Projektfarbe")}
           <div className="color-picker">
             {palette.map((c) => (
               <button
@@ -1968,7 +2119,7 @@ function ProjectModal({ project, onClose, onSaved, onDeleted }) {
                 className={c === selectedColor ? "picked" : ""}
                 style={{ background: c }}
                 key={c}
-                aria-label={`Farbe ${c}`}
+                aria-label={t("Farbe {0}", [c])}
                 onClick={() => setColor(c)}
               >
                 {c === selectedColor && <Check size={16} />}
@@ -1978,14 +2129,14 @@ function ProjectModal({ project, onClose, onSaved, onDeleted }) {
         </label>
         {!project && (
           <label>
-            Projektsymbol
+            {t("Projektsymbol")}
             <div className="icon-picker">
               {Object.entries(icons).map(([key, Icon]) => (
                 <button
                   type="button"
                   key={key}
                   className={key === selectedIcon ? "picked" : ""}
-                  aria-label={`Symbol ${key}`}
+                  aria-label={t("Symbol {0}", [key])}
                   onClick={() => setIcon(key)}
                 >
                   <Icon size={20} />
@@ -2001,7 +2152,7 @@ function ProjectModal({ project, onClose, onSaved, onDeleted }) {
               name="archived"
               defaultChecked={project.archived}
             />
-            Projekt archivieren
+            {t("Projekt archivieren")}
           </label>
         )}
         <FormError error={error} />
@@ -2013,21 +2164,29 @@ function ProjectModal({ project, onClose, onSaved, onDeleted }) {
               onClick={() => setConfirmDelete(true)}
             >
               <Trash2 size={16} />
-              Löschen
+              {t("Löschen")}
             </button>
           )}
           <button type="button" className="button secondary" onClick={onClose}>
-            Abbrechen
+            {t("Abbrechen")}
           </button>
           <button className="button primary" disabled={busy}>
-            {busy ? <Spinner /> : project ? "Speichern" : "Projekt erstellen"}
+            {busy ? (
+              <Spinner />
+            ) : project ? (
+              t("Speichern")
+            ) : (
+              t("Projekt erstellen")
+            )}
           </button>
         </div>
         {confirmDelete && (
           <div className="delete-confirmation">
-            <strong>Projekt endgültig löschen?</strong>
+            <strong>{t("Projekt endgültig löschen?")}</strong>
             <p>
-              Alle Boards, Aufgaben, Kommentare und Anhänge werden gelöscht.
+              {t(
+                "Alle Boards, Aufgaben, Kommentare und Anhänge werden gelöscht.",
+              )}
             </p>
             <button
               type="button"
@@ -2035,14 +2194,14 @@ function ProjectModal({ project, onClose, onSaved, onDeleted }) {
               disabled={busy}
               onClick={remove}
             >
-              Ja, Projekt löschen
+              {t("Ja, Projekt löschen")}
             </button>
             <button
               type="button"
               className="text-button"
               onClick={() => setConfirmDelete(false)}
             >
-              Behalten
+              {t("Behalten")}
             </button>
           </div>
         )}
@@ -2071,16 +2230,18 @@ function BoardModal({ project, onClose, onSaved }) {
   }
   return (
     <Modal
-      title="Ein neues Board"
-      subtitle="Ein eigener Überblick für den nächsten Teil deines Projekts."
+      title={t("Ein neues Board")}
+      subtitle={t(
+        "Ein eigener Überblick für den nächsten Teil deines Projekts.",
+      )}
       onClose={onClose}
     >
       <form onSubmit={submit}>
         <label>
-          Boardname
+          {t("Boardname")}
           <input
             name="name"
-            placeholder="z. B. Produktentwicklung"
+            placeholder={t("z. B. Produktentwicklung")}
             required
             maxLength={100}
             autoFocus
@@ -2089,10 +2250,10 @@ function BoardModal({ project, onClose, onSaved }) {
         <FormError error={error} />
         <div className="modal-actions">
           <button type="button" className="button secondary" onClick={onClose}>
-            Abbrechen
+            {t("Abbrechen")}
           </button>
           <button className="button primary" disabled={busy}>
-            {busy ? <Spinner /> : "Board erstellen"}
+            {busy ? <Spinner /> : t("Board erstellen")}
           </button>
         </div>
       </form>
@@ -2154,7 +2315,9 @@ function ColumnsModal({ board, onClose, onSaved }) {
       setConflict(e.status === 409);
       setError(
         e.status === 409
-          ? "Das Board wurde inzwischen geändert. Lade den aktuellen Stand; deine Bucket-Entwürfe werden dabei verworfen."
+          ? t(
+              "Das Board wurde inzwischen geändert. Lade den aktuellen Stand; deine Bucket-Entwürfe werden dabei verworfen.",
+            )
           : e.message,
       );
     } finally {
@@ -2163,13 +2326,15 @@ function ColumnsModal({ board, onClose, onSaved }) {
   }
   return (
     <Modal
-      title="Board & Buckets"
-      subtitle="Eigene Überschriften, Farben und Reihenfolge für euer Team."
+      title={t("Board & Buckets")}
+      subtitle={t(
+        "Eigene Überschriften, Farben und Reihenfolge für euer Team.",
+      )}
       onClose={onClose}
     >
       <form onSubmit={submit}>
         <label>
-          Boardname
+          {t("Boardname")}
           <input
             value={boardName}
             onChange={(e) => setBoardName(e.target.value)}
@@ -2178,10 +2343,11 @@ function ColumnsModal({ board, onClose, onSaved }) {
             disabled={busy}
           />
         </label>
-        <label>Buckets</label>
+        <label>{t("Buckets")}</label>
         <p className="bucket-note">
-          1–12 Buckets. Markiere die Buckets, deren Aufgaben als erledigt
-          gelten. Zum Entfernen eines Buckets zuerst seine Aufgaben verschieben.
+          {t(
+            "1–12 Buckets. Markiere die Buckets, deren Aufgaben als erledigt gelten. Zum Entfernen eines Buckets zuerst seine Aufgaben verschieben.",
+          )}
         </p>
         <div className="columns-editor">
           {cols.map((c, index) => {
@@ -2193,7 +2359,7 @@ function ColumnsModal({ board, onClose, onSaved }) {
                 <div className="bucket-editor-heading">
                   <input
                     type="color"
-                    aria-label={`Farbe für ${c.name}`}
+                    aria-label={t("Farbe für {0}", [c.name])}
                     value={c.color}
                     disabled={busy}
                     onChange={(e) =>
@@ -2202,7 +2368,7 @@ function ColumnsModal({ board, onClose, onSaved }) {
                   />
                   <input
                     type="text"
-                    aria-label={`Bucket ${index + 1}`}
+                    aria-label={t("Bucket {0}", [index + 1])}
                     value={c.name}
                     required
                     maxLength={100}
@@ -2218,17 +2384,19 @@ function ColumnsModal({ board, onClose, onSaved }) {
                       type="checkbox"
                       checked={c.isDone}
                       disabled={busy}
-                      aria-label={`Aufgaben in ${c.name} gelten als erledigt`}
+                      aria-label={t("Aufgaben in {0} gelten als erledigt", [
+                        c.name,
+                      ])}
                       onChange={(e) =>
                         changeColumn(c.id, { isDone: e.target.checked })
                       }
                     />
-                    Erledigt-Bucket
+                    {t("Erledigt-Bucket")}
                   </label>
                   <button
                     type="button"
                     className="icon-button"
-                    aria-label={`${c.name} nach oben`}
+                    aria-label={t("{0} nach oben", [c.name])}
                     disabled={busy || index === 0}
                     onClick={() => moveColumn(index, -1)}
                   >
@@ -2237,7 +2405,7 @@ function ColumnsModal({ board, onClose, onSaved }) {
                   <button
                     type="button"
                     className="icon-button"
-                    aria-label={`${c.name} nach unten`}
+                    aria-label={t("{0} nach unten", [c.name])}
                     disabled={busy || index === cols.length - 1}
                     onClick={() => moveColumn(index, 1)}
                   >
@@ -2246,14 +2414,16 @@ function ColumnsModal({ board, onClose, onSaved }) {
                   <button
                     type="button"
                     className="icon-button"
-                    aria-label={`${c.name} entfernen`}
+                    aria-label={t("{0} entfernen", [c.name])}
                     disabled={busy || cols.length === 1 || occupied}
                     title={
                       occupied
-                        ? "Zuerst die Aufgaben in einen anderen Bucket verschieben"
+                        ? t(
+                            "Zuerst die Aufgaben in einen anderen Bucket verschieben",
+                          )
                         : cols.length === 1
-                          ? "Mindestens ein Bucket muss bleiben"
-                          : "Bucket entfernen"
+                          ? t("Mindestens ein Bucket muss bleiben")
+                          : t("Bucket entfernen")
                     }
                     onClick={() =>
                       setCols((current) =>
@@ -2284,7 +2454,8 @@ function ColumnsModal({ board, onClose, onSaved }) {
             ])
           }
         >
-          <Plus size={16} /> Bucket hinzufügen
+          <Plus size={16} />
+          {t(" Bucket hinzufügen")}
         </button>
         <FormError error={error} />
         {conflict && (
@@ -2294,15 +2465,15 @@ function ColumnsModal({ board, onClose, onSaved }) {
             disabled={busy}
             onClick={reload}
           >
-            Aktuellen Stand laden
+            {t("Aktuellen Stand laden")}
           </button>
         )}
         <div className="modal-actions">
           <button type="button" className="button secondary" onClick={onClose}>
-            Abbrechen
+            {t("Abbrechen")}
           </button>
           <button className="button primary" disabled={busy || conflict}>
-            {busy ? <Spinner /> : "Speichern"}
+            {busy ? <Spinner /> : t("Speichern")}
           </button>
         </div>
       </form>
@@ -2432,7 +2603,7 @@ function CardModal({
       await autosave?.flight;
       const latest = await api(`/boards/${board.id}`);
       const found = latest.cards.find((c) => c.id === card.id);
-      if (!found) throw new Error("Diese Aufgabe wurde gelöscht.");
+      if (!found) throw new Error(t("Diese Aufgabe wurde gelöscht."));
       const fresh = defaults(found);
       autosave?.reset(fresh);
       setData(fresh);
@@ -2480,7 +2651,7 @@ function CardModal({
       });
       setComments(await api(`/cards/${card.id}/comments`));
       setComment("");
-      notify("Kommentar hinzugefügt");
+      notify(t("Kommentar hinzugefügt"));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -2490,7 +2661,7 @@ function CardModal({
   async function upload(file) {
     if (!file) return;
     if (file.size > 20 * 1024 * 1024) {
-      setError("Die Datei darf maximal 20 MB groß sein.");
+      setError(t("Die Datei darf maximal 20 MB groß sein."));
       return;
     }
     setUploading(true);
@@ -2500,7 +2671,7 @@ function CardModal({
       f.append("file", file);
       await api(`/cards/${card.id}/attachments`, { method: "POST", body: f });
       setFiles(await api(`/cards/${card.id}/attachments`));
-      notify("Datei hochgeladen");
+      notify(t("Datei hochgeladen"));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -2512,7 +2683,7 @@ function CardModal({
     try {
       await api(`/attachments/${id}`, { method: "DELETE" });
       setFiles(files.filter((f) => f.id !== id));
-      notify("Anhang entfernt");
+      notify(t("Anhang entfernt"));
     } catch (e) {
       setError(e.message);
     }
@@ -2521,11 +2692,11 @@ function CardModal({
   return (
     <Modal
       wide
-      title={card ? "Aufgabendetails" : "Der nächste Schritt."}
+      title={card ? t("Aufgabendetails") : t("Der nächste Schritt.")}
       subtitle={
         card
-          ? `In ${board.name}`
-          : "Eine gute Aufgabe macht klar, was zu tun ist."
+          ? t("In {0}", [board.name])
+          : t("Eine gute Aufgabe macht klar, was zu tun ist.")
       }
       onClose={close}
     >
@@ -2535,21 +2706,23 @@ function CardModal({
           onClick={() => setTab("details")}
         >
           <FileText size={15} />
-          Details
+          {t("Details")}
         </button>
         <button
           className={tab === "files" ? "active" : ""}
           onClick={() => setTab("files")}
         >
           <Paperclip size={15} />
-          Anhänge <span>{files.length}</span>
+          {t("Anhänge ")}
+          <span>{files.length}</span>
         </button>
         <button
           className={tab === "comments" ? "active" : ""}
           onClick={() => setTab("comments")}
         >
           <MessageSquare size={15} />
-          Kommentare <span>{comments.length}</span>
+          {t("Kommentare ")}
+          <span>{comments.length}</span>
         </button>
       </div>
       {card && canEdit && (
@@ -2566,12 +2739,12 @@ function CardModal({
             <Clock size={14} />
           )}
           {saveStatus === "saving"
-            ? "Wird gespeichert …"
+            ? t("Wird gespeichert …")
             : saveStatus === "pending"
-              ? "Änderungen ausstehend"
+              ? t("Änderungen ausstehend")
               : saveStatus === "error"
-                ? "Nicht gespeichert"
-                : "Alle Änderungen gespeichert"}
+                ? t("Nicht gespeichert")
+                : t("Alle Änderungen gespeichert")}
           {saveStatus === "error" && !conflict && (
             <button
               type="button"
@@ -2581,7 +2754,7 @@ function CardModal({
                 autosave.retry();
               }}
             >
-              Erneut versuchen
+              {t("Erneut versuchen")}
             </button>
           )}
         </div>
@@ -2590,41 +2763,43 @@ function CardModal({
       {conflict && (
         <button type="button" className="text-button" onClick={reload}>
           <RefreshCw size={15} />
-          Aktuelle Karte laden (eigene Änderungen verwerfen)
+          {t("Aktuelle Karte laden (eigene Änderungen verwerfen)")}
         </button>
       )}
       {tab === "details" && (
         <form onSubmit={submit}>
           <fieldset disabled={!canEdit || busy}>
             <label>
-              Titel
+              {t("Titel")}
               <input
                 value={data.title}
                 onChange={(e) => field("title", e.target.value, true)}
                 onBlur={() => autosave?.finish("title")}
                 required
                 maxLength={200}
-                placeholder="Was soll erledigt werden?"
+                placeholder={t("Was soll erledigt werden?")}
                 autoFocus
               />
             </label>
             <label>
-              Beschreibung
+              {t("Beschreibung")}
               <textarea
-                aria-label="Beschreibung"
+                aria-label={t("Beschreibung")}
                 value={data.description}
                 onChange={(e) => field("description", e.target.value, true)}
                 onBlur={() => autosave?.finish("description")}
                 rows={4}
                 maxLength={20000}
-                placeholder="Hintergrund, Ziele und alles, was dein Team wissen sollte …"
+                placeholder={t(
+                  "Hintergrund, Ziele und alles, was dein Team wissen sollte …",
+                )}
               />
             </label>
             <div className="form-grid">
               <label>
-                Status
+                {t("Status")}
                 <select
-                  aria-label="Status"
+                  aria-label={t("Status")}
                   value={data.columnId}
                   onChange={(e) => field("columnId", e.target.value)}
                 >
@@ -2636,27 +2811,27 @@ function CardModal({
                 </select>
               </label>
               <label>
-                Priorität
+                {t("Priorität")}
                 <select
-                  aria-label="Priorität"
+                  aria-label={t("Priorität")}
                   value={data.priority}
                   onChange={(e) => field("priority", e.target.value)}
                 >
                   {Object.entries(priorities).map(([key, p]) => (
                     <option value={key} key={key}>
-                      {p.label}
+                      {t(p.label)}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                Verantwortlich
+                {t("Verantwortlich")}
                 <select
-                  aria-label="Verantwortlich"
+                  aria-label={t("Verantwortlich")}
                   value={data.assigneeId}
                   onChange={(e) => field("assigneeId", e.target.value)}
                 >
-                  <option value="">Noch nicht zugewiesen</option>
+                  <option value="">{t("Noch nicht zugewiesen")}</option>
                   {members
                     .filter((m) => !m.disabled)
                     .map((m) => (
@@ -2667,7 +2842,7 @@ function CardModal({
                 </select>
               </label>
               <label>
-                Fällig am
+                {t("Fällig am")}
                 <input
                   type="date"
                   value={data.dueDate}
@@ -2676,18 +2851,20 @@ function CardModal({
               </label>
             </div>
             <label>
-              Labels{" "}
-              <span className="label-hint">mit Komma trennen, maximal 8</span>
+              {t("Labels")}{" "}
+              <span className="label-hint">
+                {t("mit Komma trennen, maximal 8")}
+              </span>
               <input
                 value={data.labels}
                 onChange={(e) => field("labels", e.target.value, true)}
                 onBlur={() => autosave?.finish("labels")}
-                placeholder="z. B. Design, Entwicklung"
+                placeholder={t("z. B. Design, Entwicklung")}
                 maxLength={248}
               />
             </label>
             <div className="completion-field">
-              <span id="task-progress-label">Fortschritt</span>
+              <span id="task-progress-label">{t("Fortschritt")}</span>
               <div
                 className="completion-buttons"
                 role="group"
@@ -2701,7 +2878,8 @@ function CardModal({
                     className={data.progress === progress ? "selected" : ""}
                     onClick={() => field("progress", progress)}
                   >
-                    {progress} %
+                    {progress}
+                    {" %"}
                   </button>
                 ))}
               </div>
@@ -2709,10 +2887,13 @@ function CardModal({
             <div className="checklist-heading">
               <h3>
                 <CheckSquare size={17} />
-                Checkliste
+                {t("Checkliste")}
               </h3>
               <span>
-                {done} / {data.checklist.length} erledigt
+                {done}
+                {" / "}
+                {data.checklist.length}
+                {t(" erledigt")}
               </span>
             </div>
             {data.checklist.length > 0 && (
@@ -2741,7 +2922,7 @@ function CardModal({
                     }
                   />
                   <input
-                    aria-label="Checklistenpunkt"
+                    aria-label={t("Checklistenpunkt")}
                     onBlur={() => autosave?.finish("checklist")}
                     value={item.text}
                     maxLength={300}
@@ -2760,7 +2941,7 @@ function CardModal({
                     <button
                       type="button"
                       className="icon-button"
-                      aria-label="Checklistenpunkt entfernen"
+                      aria-label={t("Checklistenpunkt entfernen")}
                       onClick={() =>
                         field(
                           "checklist",
@@ -2781,14 +2962,14 @@ function CardModal({
                   value={newItem}
                   onChange={(e) => setNewItem(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if (e.key === t("Enter")) {
                       e.preventDefault();
                       addItem();
                     }
                   }}
                   maxLength={300}
-                  placeholder="Checklistenpunkt hinzufügen …"
-                  aria-label="Neuer Checklistenpunkt"
+                  placeholder={t("Checklistenpunkt hinzufügen …")}
+                  aria-label={t("Neuer Checklistenpunkt")}
                 />
                 <button
                   type="button"
@@ -2796,7 +2977,7 @@ function CardModal({
                   disabled={!newItem.trim() || data.checklist.length >= 50}
                   onClick={addItem}
                 >
-                  Hinzufügen
+                  {t("Hinzufügen")}
                 </button>
               </div>
             )}
@@ -2809,27 +2990,27 @@ function CardModal({
                 onClick={() => setConfirmDelete(true)}
               >
                 <Trash2 size={15} />
-                Löschen
+                {t("Löschen")}
               </button>
             )}
             <button type="button" className="button secondary" onClick={close}>
-              {card || !canEdit ? "Schließen" : "Abbrechen"}
+              {card || !canEdit ? t("Schließen") : t("Abbrechen")}
             </button>
             {canEdit && !card && (
               <button className="button primary" disabled={busy || uploading}>
-                {busy ? <Spinner /> : "Aufgabe erstellen"}
+                {busy ? <Spinner /> : t("Aufgabe erstellen")}
               </button>
             )}
             {card && saveStatus === "error" && (
               <button type="button" className="text-button" onClick={onClose}>
-                Ungespeicherte Änderungen verwerfen
+                {t("Ungespeicherte Änderungen verwerfen")}
               </button>
             )}
           </div>
           {confirmDelete && (
             <div className="delete-confirmation">
               <strong>
-                Diese Aufgabe mit Kommentaren und Anhängen löschen?
+                {t("Diese Aufgabe mit Kommentaren und Anhängen löschen?")}
               </strong>
               <button
                 type="button"
@@ -2837,14 +3018,14 @@ function CardModal({
                 onClick={remove}
                 disabled={busy}
               >
-                Endgültig löschen
+                {t("Endgültig löschen")}
               </button>
               <button
                 type="button"
                 className="text-button"
                 onClick={() => setConfirmDelete(false)}
               >
-                Behalten
+                {t("Behalten")}
               </button>
             </div>
           )}
@@ -2853,9 +3034,10 @@ function CardModal({
       {tab === "files" && (
         <div className="attachment-section">
           {!card ? (
-            <Empty icon={Paperclip} title="Zuerst die Aufgabe erstellen">
-              Speichere deine Aufgabe. Danach kannst du Dokumente und Bilder
-              anhängen.
+            <Empty icon={Paperclip} title={t("Zuerst die Aufgabe erstellen")}>
+              {t(
+                "Speichere deine Aufgabe. Danach kannst du Dokumente und Bilder anhängen.",
+              )}
             </Empty>
           ) : (
             <>
@@ -2881,11 +3063,11 @@ function CardModal({
                     {uploading ? <Spinner /> : <CloudUpload size={30} />}
                     <strong>
                       {uploading
-                        ? "Datei wird hochgeladen …"
-                        : "Datei auswählen oder hier ablegen"}
+                        ? t("Datei wird hochgeladen …")
+                        : t("Datei auswählen oder hier ablegen")}
                     </strong>
                     <span>
-                      Dokumente, Bilder und ZIP · maximal 20 MB pro Datei
+                      {t("Dokumente, Bilder und ZIP · maximal 20 MB pro Datei")}
                     </span>
                   </button>
                 </>
@@ -2898,13 +3080,15 @@ function CardModal({
                   <div>
                     <a href={`/api/attachments/${f.id}/download`}>{f.name}</a>
                     <span>
-                      {(f.size / 1024).toFixed(1)} KB · {dateTime(f.createdAt)}
+                      {(f.size / 1024).toFixed(1)}
+                      {t(" KB · ")}
+                      {dateTime(f.createdAt)}
                     </span>
                   </div>
                   {canEdit && (
                     <button
                       className="icon-button"
-                      aria-label={`${f.name} entfernen`}
+                      aria-label={t("{0} entfernen", [f.name])}
                       onClick={() => removeFile(f.id)}
                     >
                       <Trash2 size={16} />
@@ -2913,8 +3097,8 @@ function CardModal({
                 </div>
               ))}
               {!files.length && !canEdit && (
-                <Empty icon={Paperclip} title="Noch keine Anhänge">
-                  Hier finden alle Dateien zu dieser Aufgabe ihren Platz.
+                <Empty icon={Paperclip} title={t("Noch keine Anhänge")}>
+                  {t("Hier finden alle Dateien zu dieser Aufgabe ihren Platz.")}
                 </Empty>
               )}
             </>
@@ -2924,18 +3108,24 @@ function CardModal({
       {tab === "comments" && (
         <div className="comments-section">
           {!card ? (
-            <Empty icon={MessageSquare} title="Zuerst die Aufgabe erstellen">
-              Nach dem Speichern kann dein Team hier den aktuellen Stand
-              besprechen.
+            <Empty
+              icon={MessageSquare}
+              title={t("Zuerst die Aufgabe erstellen")}
+            >
+              {t(
+                "Nach dem Speichern kann dein Team hier den aktuellen Stand besprechen.",
+              )}
             </Empty>
           ) : (
             <>
               {comments.length === 0 && (
                 <Empty
                   icon={MessageSquare}
-                  title="Die Unterhaltung beginnt hier"
+                  title={t("Die Unterhaltung beginnt hier")}
                 >
-                  Teile den aktuellen Stand, eine Frage oder eine gute Idee.
+                  {t(
+                    "Teile den aktuellen Stand, eine Frage oder eine gute Idee.",
+                  )}
                 </Empty>
               )}
               {comments.map((c) => (
@@ -2958,16 +3148,18 @@ function CardModal({
                       required
                       maxLength={5000}
                       rows={3}
-                      placeholder="Ein Update oder einen Kommentar schreiben …"
+                      placeholder={t(
+                        "Ein Update oder einen Kommentar schreiben …",
+                      )}
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
-                      aria-label="Kommentar"
+                      aria-label={t("Kommentar")}
                     />
                     <button
                       className="button primary"
                       disabled={busy || !comment.trim()}
                     >
-                      {busy ? <Spinner /> : "Kommentar senden"}
+                      {busy ? <Spinner /> : t("Kommentar senden")}
                       <ArrowRight size={15} />
                     </button>
                   </div>
@@ -3005,7 +3197,7 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
       });
       setLink(r.url);
       await load();
-      notify("Einladungslink erstellt");
+      notify(t("Einladungslink erstellt"));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -3019,7 +3211,7 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
         body: { role },
       });
       await onChanged();
-      notify("Berechtigung gespeichert");
+      notify(t("Berechtigung gespeichert"));
     } catch (e) {
       setError(e.message);
     }
@@ -3028,7 +3220,7 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
     try {
       await api(`/projects/${project.id}/members/${id}`, { method: "DELETE" });
       await onChanged();
-      notify("Mitglied entfernt");
+      notify(t("Mitglied entfernt"));
     } catch (e) {
       setError(e.message);
     }
@@ -3040,7 +3232,7 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
       });
       await load();
       setLink("");
-      notify("Einladung zurückgezogen");
+      notify(t("Einladung zurückgezogen"));
     } catch (e) {
       setError(e.message);
     }
@@ -3048,15 +3240,15 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
   async function copy() {
     try {
       await navigator.clipboard.writeText(link);
-      notify("Einladungslink kopiert");
+      notify(t("Einladungslink kopiert"));
     } catch {
-      notify("Bitte kopiere den Link aus dem Textfeld.", true);
+      notify(t("Bitte kopiere den Link aus dem Textfeld."), true);
     }
   }
   return (
     <Modal
-      title="Gemeinsam mehr bewegen."
-      subtitle={`Team & Einladungen für ${project.name}`}
+      title={t("Gemeinsam mehr bewegen.")}
+      subtitle={t("Team & Einladungen für {0}", [project.name])}
       onClose={onClose}
     >
       <FormError error={error} />
@@ -3064,7 +3256,7 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
         <>
           <form onSubmit={invite}>
             <label>
-              E-Mail-Adresse
+              {t("E-Mail-Adresse")}
               <input
                 name="email"
                 type="email"
@@ -3075,10 +3267,10 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
             </label>
             <div className="invite-form-bottom">
               <label>
-                Berechtigung
+                {t("Berechtigung")}
                 <select name="role">
-                  <option value="editor">Kann bearbeiten</option>
-                  <option value="viewer">Kann lesen</option>
+                  <option value="editor">{t("Kann bearbeiten")}</option>
+                  <option value="viewer">{t("Kann lesen")}</option>
                 </select>
               </label>
               <button className="button primary" disabled={busy}>
@@ -3087,31 +3279,32 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
                 ) : (
                   <>
                     <Link size={16} />
-                    Einladungslink erstellen
+                    {t("Einladungslink erstellen")}
                   </>
                 )}
               </button>
             </div>
             <p className="form-note">
-              Der Link gilt 7 Tage. Teile ihn persönlich mit der eingeladenen
-              Person; es wird keine E-Mail versendet.
+              {t(
+                "Der Link gilt 7 Tage. Teile ihn persönlich mit der eingeladenen Person; es wird keine E-Mail versendet.",
+              )}
             </p>
           </form>
           {link && (
             <div className="generated-link">
               <CheckCircle2 size={18} />
               <div>
-                <strong>Bereit zum Teilen</strong>
+                <strong>{t("Bereit zum Teilen")}</strong>
                 <input
                   readOnly
                   value={link}
-                  aria-label="Einladungslink"
+                  aria-label={t("Einladungslink")}
                   onClick={(e) => e.target.select()}
                 />
               </div>
               <button
                 className="icon-button"
-                aria-label="Einladungslink kopieren"
+                aria-label={t("Einladungslink kopieren")}
                 onClick={copy}
               >
                 <Copy size={18} />
@@ -3122,7 +3315,7 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
       )}
       <div className="section-heading compact">
         <h3>
-          Projektmitglieder{" "}
+          {t("Projektmitglieder")}{" "}
           <span className="number-badge">{members.length}</span>
         </h3>
       </div>
@@ -3132,38 +3325,38 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
           <div>
             <strong>
               {m.name}
-              {m.disabled ? " (deaktiviert)" : ""}
+              {m.disabled ? t(" (deaktiviert)") : ""}
             </strong>
             <span>{m.email}</span>
           </div>
           {owner && m.projectRole !== "owner" ? (
             <>
               <select
-                aria-label={`Berechtigung für ${m.name}`}
+                aria-label={t("Berechtigung für {0}", [m.name])}
                 value={m.projectRole}
                 onChange={(e) => change(m.id, e.target.value)}
               >
-                <option value="editor">Bearbeiten</option>
-                <option value="viewer">Lesen</option>
+                <option value="editor">{t("Bearbeiten")}</option>
+                <option value="viewer">{t("Lesen")}</option>
               </select>
               <button
                 className="icon-button"
-                title="Mitglied entfernen"
-                aria-label={`${m.name} entfernen`}
+                title={t("Mitglied entfernen")}
+                aria-label={t("{0} entfernen", [m.name])}
                 onClick={() => remove(m.id)}
               >
                 <X size={16} />
               </button>
             </>
           ) : (
-            <span className="badge gray">{roleNames[m.projectRole]}</span>
+            <span className="badge gray">{t(roleNames[m.projectRole])}</span>
           )}
         </div>
       ))}
       {owner && invitations.length > 0 && (
         <>
           <div className="section-heading compact">
-            <h3>Offene Einladungen</h3>
+            <h3>{t("Offene Einladungen")}</h3>
           </div>
           {invitations.map((i) => (
             <div className="invitation-row" key={i.id}>
@@ -3173,12 +3366,14 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
               <div>
                 <strong>{i.email}</strong>
                 <span>
-                  {roleNames[i.role]} · gültig bis {dateTime(i.expiresAt)}
+                  {t(roleNames[i.role])}
+                  {t(" · gültig bis ")}
+                  {dateTime(i.expiresAt)}
                 </span>
               </div>
               <button
                 className="icon-button"
-                aria-label={`Einladung an ${i.email} zurückziehen`}
+                aria-label={t("Einladung an {0} zurückziehen", [i.email])}
                 onClick={() => revoke(i.id)}
               >
                 <X size={16} />
@@ -3189,7 +3384,7 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
       )}
       <div className="modal-actions">
         <button className="button secondary" onClick={onClose}>
-          Schließen
+          {t("Schließen")}
         </button>
       </div>
     </Modal>
@@ -3221,7 +3416,7 @@ function Admin({ user, notify, onUpdate }) {
     try {
       await api("/admin/auth", { method: "PUT", body: config });
       setConfig(await api("/admin/auth"));
-      notify("Anmeldekonfiguration gespeichert");
+      notify(t("Anmeldekonfiguration gespeichert"));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -3248,13 +3443,13 @@ function Admin({ user, notify, onUpdate }) {
     <div className="page-content admin-page">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">ARBEITSBEREICH VERWALTEN</span>
-          <h1>Administration</h1>
-          <p>Ein sicherer Zugang für dein Team.</p>
+          <span className="eyebrow">{t("ARBEITSBEREICH VERWALTEN")}</span>
+          <h1>{t("Administration")}</h1>
+          <p>{t("Ein sicherer Zugang für dein Team.")}</p>
         </div>
         <span className="admin-badge">
           <Shield size={15} />
-          Administrator
+          {t("Administrator")}
         </span>
       </div>
       <div className="admin-tabs">
@@ -3263,14 +3458,15 @@ function Admin({ user, notify, onUpdate }) {
           onClick={() => setTab("auth")}
         >
           <Lock size={16} />
-          Anmeldung
+          {t("Anmeldung")}
         </button>
         <button
           className={tab === "users" ? "active" : ""}
           onClick={() => setTab("users")}
         >
           <Users size={16} />
-          Benutzer <span>{users.length}</span>
+          {t("Benutzer ")}
+          <span>{users.length}</span>
         </button>
       </div>
       <FormError error={error} />
@@ -3280,8 +3476,8 @@ function Admin({ user, notify, onUpdate }) {
         ) : (
           <form className="settings-card" onSubmit={save}>
             <div className="section-heading">
-              <h2>Anmeldeanbieter</h2>
-              <p>Verbinde euren Identitätsanbieter mit Projektwerk.</p>
+              <h2>{t("Anmeldeanbieter")}</h2>
+              <p>{t("Verbinde euren Identitätsanbieter mit Projektwerk.")}</p>
             </div>
             <div className="provider-options">
               {[
@@ -3316,8 +3512,8 @@ function Admin({ user, notify, onUpdate }) {
                     onChange={() => setConfig({ ...config, provider: key })}
                   />
                   <Icon size={22} />
-                  <strong>{title}</strong>
-                  <span>{description}</span>
+                  <strong>{t(title)}</strong>
+                  <span>{t(description)}</span>
                 </label>
               ))}
             </div>
@@ -3325,9 +3521,9 @@ function Admin({ user, notify, onUpdate }) {
               <div className="settings-info">
                 <Shield size={20} />
                 <p>
-                  Lokale Konten erhalten ein persönliches Passwort. Neue Konten
-                  kannst du hier anlegen oder über eine Projekteinladung
-                  erstellen lassen.
+                  {t(
+                    "Lokale Konten erhalten ein persönliches Passwort. Neue Konten kannst du hier anlegen oder über eine Projekteinladung erstellen lassen.",
+                  )}
                 </p>
               </div>
             )}
@@ -3335,16 +3531,16 @@ function Admin({ user, notify, onUpdate }) {
               <>
                 <div className="form-grid">
                   <label>
-                    Anzeigename
+                    {t("Anzeigename")}
                     <input
                       value={config.oidc.name || ""}
                       onChange={(e) => update("oidc", "name", e.target.value)}
-                      placeholder="Mit Microsoft anmelden"
+                      placeholder={t("Mit Microsoft anmelden")}
                       maxLength={100}
                     />
                   </label>
                   <label>
-                    Issuer-URL
+                    {t("Issuer-URL")}
                     <input
                       value={config.oidc.issuer || ""}
                       onChange={(e) => update("oidc", "issuer", e.target.value)}
@@ -3354,18 +3550,18 @@ function Admin({ user, notify, onUpdate }) {
                     />
                   </label>
                   <label>
-                    Client-ID
+                    {t("Client-ID")}
                     <input
                       value={config.oidc.clientId || ""}
                       onChange={(e) =>
                         update("oidc", "clientId", e.target.value)
                       }
                       required
-                      placeholder="ID der registrierten Anwendung"
+                      placeholder={t("ID der registrierten Anwendung")}
                     />
                   </label>
                   <label>
-                    Client-Secret
+                    {t("Client-Secret")}
                     <input
                       type="password"
                       autoComplete="new-password"
@@ -3373,29 +3569,29 @@ function Admin({ user, notify, onUpdate }) {
                       onChange={(e) => update("oidc", "secret", e.target.value)}
                       placeholder={
                         config.oidc.hasSecret
-                          ? "Gespeichert – leer lassen zum Beibehalten"
-                          : "Geheimer Clientschlüssel"
+                          ? t("Gespeichert – leer lassen zum Beibehalten")
+                          : t("Geheimer Clientschlüssel")
                       }
                     />
                   </label>
                 </div>
                 <label>
-                  Redirect-URI
+                  {t("Redirect-URI")}
                   <div className="readonly-url">
                     <input value={config.callbackUrl} readOnly />
                     <button
                       type="button"
                       className="icon-button"
-                      aria-label="Redirect-URI kopieren"
+                      aria-label={t("Redirect-URI kopieren")}
                       onClick={async () => {
                         try {
                           await navigator.clipboard.writeText(
                             config.callbackUrl,
                           );
-                          notify("Redirect-URI kopiert");
+                          notify(t("Redirect-URI kopiert"));
                         } catch {
                           notify(
-                            "Bitte kopiere die URI aus dem Textfeld.",
+                            t("Bitte kopiere die URI aus dem Textfeld."),
                             true,
                           );
                         }
@@ -3405,8 +3601,9 @@ function Admin({ user, notify, onUpdate }) {
                     </button>
                   </div>
                   <span className="field-note">
-                    Diese Adresse beim Identitätsanbieter als Web-Redirect-URI
-                    registrieren.
+                    {t(
+                      "Diese Adresse beim Identitätsanbieter als Web-Redirect-URI registrieren.",
+                    )}
                   </span>
                 </label>
                 <label className="checkbox-label">
@@ -3418,14 +3615,13 @@ function Admin({ user, notify, onUpdate }) {
                     }
                   />
                   <span>
-                    E-Mail-Claim dieses Unternehmensanbieters vertrauen
+                    {t("E-Mail-Claim dieses Unternehmensanbieters vertrauen")}
                   </span>
                 </label>
                 <p className="form-note">
-                  Standardmäßig wird email_verified=true verlangt. Für Entra ID
-                  nur aktivieren, wenn dein Tenant die E-Mail-Adressen
-                  verlässlich verwaltet. Beim ersten externen Login ist ein
-                  passender Einladungslink erforderlich.
+                  {t(
+                    "Standardmäßig wird email_verified=true verlangt. Für Entra ID nur aktivieren, wenn dein Tenant die E-Mail-Adressen verlässlich verwaltet. Beim ersten externen Login ist ein passender Einladungslink erforderlich.",
+                  )}
                 </p>
               </>
             )}
@@ -3433,7 +3629,7 @@ function Admin({ user, notify, onUpdate }) {
               <>
                 <div className="form-grid">
                   <label>
-                    LDAP-Server
+                    {t("LDAP-Server")}
                     <input
                       value={config.ldap.url || ""}
                       onChange={(e) => update("ldap", "url", e.target.value)}
@@ -3442,7 +3638,7 @@ function Admin({ user, notify, onUpdate }) {
                     />
                   </label>
                   <label>
-                    Base-DN
+                    {t("Base-DN")}
                     <input
                       value={config.ldap.baseDn || ""}
                       onChange={(e) => update("ldap", "baseDn", e.target.value)}
@@ -3451,7 +3647,7 @@ function Admin({ user, notify, onUpdate }) {
                     />
                   </label>
                   <label>
-                    Bind-DN / Servicekonto
+                    {t("Bind-DN / Servicekonto")}
                     <input
                       value={config.ldap.bindDn || ""}
                       onChange={(e) => update("ldap", "bindDn", e.target.value)}
@@ -3460,7 +3656,7 @@ function Admin({ user, notify, onUpdate }) {
                     />
                   </label>
                   <label>
-                    Bind-Passwort
+                    {t("Bind-Passwort")}
                     <input
                       type="password"
                       autoComplete="new-password"
@@ -3470,14 +3666,14 @@ function Admin({ user, notify, onUpdate }) {
                       }
                       placeholder={
                         config.ldap.hasPassword
-                          ? "Gespeichert – leer lassen zum Beibehalten"
-                          : "Passwort des Servicekontos"
+                          ? t("Gespeichert – leer lassen zum Beibehalten")
+                          : t("Passwort des Servicekontos")
                       }
                     />
                   </label>
                 </div>
                 <label>
-                  Benutzersuchfilter
+                  {t("Benutzersuchfilter")}
                   <input
                     value={
                       config.ldap.filter ||
@@ -3487,8 +3683,10 @@ function Admin({ user, notify, onUpdate }) {
                     required
                   />
                   <span className="field-note">
-                    {"{username}"} wird durch den sicher maskierten
-                    Benutzernamen ersetzt.
+                    {"{username}"}
+                    {t(
+                      " wird durch den sicher maskierten Benutzernamen ersetzt.",
+                    )}
                   </span>
                 </label>
                 <label className="checkbox-label">
@@ -3499,27 +3697,27 @@ function Admin({ user, notify, onUpdate }) {
                       update("ldap", "startTls", e.target.checked)
                     }
                   />
-                  StartTLS verwenden (für ldap://)
+                  {t("StartTLS verwenden (für ldap://)")}
                 </label>
                 <p className="form-note">
-                  Die Verbindung prüft Serverzertifikate. Das Verzeichniskonto
-                  benötigt eine E-Mail-Adresse. Der erste Login erfolgt über
-                  eine passende Projekteinladung.
+                  {t(
+                    "Die Verbindung prüft Serverzertifikate. Das Verzeichniskonto benötigt eine E-Mail-Adresse. Der erste Login erfolgt über eine passende Projekteinladung.",
+                  )}
                 </p>
               </>
             )}
             <div className="settings-info subtle">
               <Lock size={17} />
               <p>
-                Lokale Konten bleiben zur Anmeldung verfügbar. Secrets werden
-                verschlüsselt gespeichert und nicht an den Browser
-                zurückgegeben.
+                {t(
+                  "Lokale Konten bleiben zur Anmeldung verfügbar. Secrets werden verschlüsselt gespeichert und nicht an den Browser zurückgegeben.",
+                )}
               </p>
             </div>
             {message && (
               <div className="test-success" role="status">
                 <CheckCircle2 size={18} />
-                {message}
+                {t(message)}
               </div>
             )}
             <div className="modal-actions">
@@ -3529,12 +3727,12 @@ function Admin({ user, notify, onUpdate }) {
                 disabled={testing || busy}
                 onClick={test}
               >
-                {testing ? <Spinner /> : <RefreshCw size={16} />}Verbindung
-                prüfen
+                {testing ? <Spinner /> : <RefreshCw size={16} />}
+                {t("Verbindung prüfen")}
               </button>
               <button className="button primary" disabled={testing || busy}>
-                {busy ? <Spinner /> : <Check size={16} />}Konfiguration
-                speichern
+                {busy ? <Spinner /> : <Check size={16} />}
+                {t("Konfiguration speichern")}
               </button>
             </div>
           </form>
@@ -3543,22 +3741,22 @@ function Admin({ user, notify, onUpdate }) {
         <div className="settings-card">
           <div className="section-heading inline">
             <div>
-              <h2>Benutzerverwaltung</h2>
-              <p>Konten, Rollen und Zugriffe verwalten.</p>
+              <h2>{t("Benutzerverwaltung")}</h2>
+              <p>{t("Konten, Rollen und Zugriffe verwalten.")}</p>
             </div>
             <button className="button primary" onClick={() => setUserModal({})}>
               <Plus size={16} />
-              Benutzer anlegen
+              {t("Benutzer anlegen")}
             </button>
           </div>
           <div className="table-wrap">
             <table className="users-table">
               <thead>
                 <tr>
-                  <th>Benutzer</th>
-                  <th>Rolle</th>
-                  <th>Anmeldung</th>
-                  <th>Status</th>
+                  <th>{t("Benutzer")}</th>
+                  <th>{t("Rolle")}</th>
+                  <th>{t("Anmeldung")}</th>
+                  <th>{t("Status")}</th>
                   <th />
                 </tr>
               </thead>
@@ -3571,31 +3769,33 @@ function Admin({ user, notify, onUpdate }) {
                         <div>
                           <strong>
                             {u.name}
-                            {u.id === user.id ? " (du)" : ""}
+                            {u.id === user.id ? t(" (du)") : ""}
                           </strong>
                           <small>{u.email}</small>
                         </div>
                       </div>
                     </td>
-                    <td>{u.role === "admin" ? "Administrator" : "Mitglied"}</td>
+                    <td>
+                      {u.role === "admin" ? t("Administrator") : t("Mitglied")}
+                    </td>
                     <td>
                       {u.authType === "local"
-                        ? "Lokal"
+                        ? t("Lokal")
                         : u.authType === "ldap"
-                          ? "Active Directory"
-                          : "OpenID Connect"}
+                          ? t("Active Directory")
+                          : t("OpenID Connect")}
                     </td>
                     <td>
                       <span
                         className={`badge ${u.disabled ? "gray" : "green"}`}
                       >
-                        {u.disabled ? "Deaktiviert" : "Aktiv"}
+                        {u.disabled ? t("Deaktiviert") : t("Aktiv")}
                       </span>
                     </td>
                     <td>
                       <button
                         className="icon-button"
-                        aria-label={`${u.name} bearbeiten`}
+                        aria-label={t("{0} bearbeiten", [u.name])}
                         onClick={() => setUserModal(u)}
                       >
                         <Settings size={16} />
@@ -3617,7 +3817,7 @@ function Admin({ user, notify, onUpdate }) {
             setUserModal(null);
             await loadUsers();
             await onUpdate();
-            notify("Benutzer gespeichert");
+            notify(t("Benutzer gespeichert"));
           }}
         />
       )}
@@ -3653,13 +3853,13 @@ function UserModal({ editedUser, currentUser, onClose, onSaved }) {
   }
   return (
     <Modal
-      title={existing ? "Benutzer bearbeiten" : "Benutzer anlegen"}
-      subtitle="Lokale Konten und Arbeitsbereichsrechte."
+      title={existing ? t("Benutzer bearbeiten") : t("Benutzer anlegen")}
+      subtitle={t("Lokale Konten und Arbeitsbereichsrechte.")}
       onClose={onClose}
     >
       <form onSubmit={submit}>
         <label>
-          Name
+          {t("Name")}
           <input
             name="name"
             required
@@ -3668,7 +3868,7 @@ function UserModal({ editedUser, currentUser, onClose, onSaved }) {
           />
         </label>
         <label>
-          E-Mail-Adresse
+          {t("E-Mail-Adresse")}
           <input
             name="email"
             type="email"
@@ -3679,15 +3879,15 @@ function UserModal({ editedUser, currentUser, onClose, onSaved }) {
           />
         </label>
         <label>
-          Rolle
+          {t("Rolle")}
           <select name="role" defaultValue={editedUser.role || "user"}>
-            <option value="user">Mitglied</option>
-            <option value="admin">Administrator</option>
+            <option value="user">{t("Mitglied")}</option>
+            <option value="admin">{t("Administrator")}</option>
           </select>
         </label>
         {(!existing || editedUser.authType === "local") && (
           <label>
-            {existing ? "Neues Passwort (optional)" : "Passwort"}
+            {existing ? t("Neues Passwort (optional)") : t("Passwort")}
             <input
               type="password"
               name="password"
@@ -3697,8 +3897,8 @@ function UserModal({ editedUser, currentUser, onClose, onSaved }) {
               maxLength={72}
               placeholder={
                 existing
-                  ? "Leer lassen zum Beibehalten"
-                  : "Mindestens 10 Zeichen"
+                  ? t("Leer lassen zum Beibehalten")
+                  : t("Mindestens 10 Zeichen")
               }
             />
           </label>
@@ -3711,16 +3911,16 @@ function UserModal({ editedUser, currentUser, onClose, onSaved }) {
               defaultChecked={editedUser.disabled}
               disabled={currentUser.id === editedUser.id}
             />
-            Konto deaktivieren
+            {t("Konto deaktivieren")}
           </label>
         )}
         <FormError error={error} />
         <div className="modal-actions">
           <button type="button" className="button secondary" onClick={onClose}>
-            Abbrechen
+            {t("Abbrechen")}
           </button>
           <button className="button primary" disabled={busy}>
-            {busy ? <Spinner /> : "Speichern"}
+            {busy ? <Spinner /> : t("Speichern")}
           </button>
         </div>
       </form>

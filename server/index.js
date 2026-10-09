@@ -1,3 +1,8 @@
+import {
+  requestLanguage,
+  translateForRequest,
+  translateForLanguage,
+} from "./language.js";
 import "dotenv/config";
 import express from "express";
 import helmet from "helmet";
@@ -130,26 +135,34 @@ const name = z.string().trim().min(1).max(100);
 const color = z.string().regex(/^#[0-9a-f]{6}$/i);
 const uuid = z.uuid();
 const inviteToken = z.string().regex(/^[a-f0-9]{64}$/);
-const columns = () => [
-  { id: randomUUID(), name: "Offen", color: "#94a3b8", isDone: false },
-  { id: randomUUID(), name: "In Arbeit", color: "#6366f1", isDone: false },
-  { id: randomUUID(), name: "Review", color: "#f59e0b", isDone: false },
-  { id: randomUUID(), name: "Erledigt", color: "#10b981", isDone: true },
-];
+const columns = (language = "de") =>
+  [
+    { id: randomUUID(), name: "Offen", color: "#94a3b8", isDone: false },
+    { id: randomUUID(), name: "In Arbeit", color: "#6366f1", isDone: false },
+    { id: randomUUID(), name: "Review", color: "#f59e0b", isDone: false },
+    { id: randomUUID(), name: "Erledigt", color: "#10b981", isDone: true },
+  ].map((column) => ({
+    ...column,
+    name: translateForLanguage(language, column.name),
+  }));
 async function log(req, b, action, cardTitle, t) {
   await Activity.create(
     { BoardId: b.id, UserId: req.user.id, action, cardTitle },
     { transaction: t },
   );
 }
-async function createProject(userId, data, t) {
+async function createProject(userId, data, t, language = "de") {
   const p = await Project.create(data, { transaction: t });
   await Membership.create(
     { ProjectId: p.id, UserId: userId, role: "owner" },
     { transaction: t },
   );
   const b = await Board.create(
-    { ProjectId: p.id, name: "Projektboard", columns: columns() },
+    {
+      ProjectId: p.id,
+      name: translateForLanguage(language, "Projektboard"),
+      columns: columns(language),
+    },
     { transaction: t },
   );
   return { project: p, board: b };
@@ -198,16 +211,20 @@ app.post(
         { transaction: t },
       );
       if (input.sample) {
+        const language = requestLanguage(req);
         const { board } = await createProject(
           u.id,
           {
-            name: "Unser erstes Projekt",
-            description:
+            name: translateForLanguage(language, "Unser erstes Projekt"),
+            description: translateForLanguage(
+              language,
               "Ein Platz für Ideen, Aufgaben und alles, was wir gemeinsam bewegen.",
+            ),
             color: "#6366f1",
             icon: "layers",
           },
           t,
+          language,
         );
         const examples = [
           [
@@ -258,12 +275,14 @@ app.post(
           await Card.create(
             {
               BoardId: board.id,
-              title,
-              description,
+              title: translateForLanguage(language, title),
+              description: translateForLanguage(language, description),
               columnId: board.columns[col].id,
               position: i,
               priority,
-              labels,
+              labels: labels.map((label) =>
+                translateForLanguage(language, label),
+              ),
               assigneeId: u.id,
             },
             { transaction: t },
@@ -420,6 +439,18 @@ app.get(
   }),
 );
 app.get("/api/me", requireUser, (req, res) => res.json(publicUser(req.user)));
+app.patch(
+  "/api/me",
+  requireUser,
+  api(async (req, res) => {
+    const input = z
+      .object({ language: z.enum(["system", "de", "en"]) })
+      .strict()
+      .parse(req.body);
+    await req.user.update(input);
+    res.json(publicUser(req.user));
+  }),
+);
 app.post(
   "/api/auth/logout",
   api(async (req, res) => {
@@ -560,7 +591,7 @@ app.post(
       })
       .parse(req.body);
     const result = await db.transaction((t) =>
-      createProject(req.user.id, input, t),
+      createProject(req.user.id, input, t, requestLanguage(req)),
     );
     res.status(201).json(result.project);
   }),
@@ -778,15 +809,13 @@ app.post(
   api(async (req, res) => {
     await member(req, req.params.id, true);
     const input = z.object({ name }).parse(req.body);
-    res
-      .status(201)
-      .json(
-        await Board.create({
-          ProjectId: req.params.id,
-          name: input.name,
-          columns: columns(),
-        }),
-      );
+    res.status(201).json(
+      await Board.create({
+        ProjectId: req.params.id,
+        name: input.name,
+        columns: columns(requestLanguage(req)),
+      }),
+    );
   }),
 );
 app.get(
@@ -1560,34 +1589,31 @@ app.use(express.static(dist, { index: false, maxAge: "1h" }));
 app.get("/{*path}", (req, res) => res.sendFile(path.join(dist, "index.html")));
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError)
-    return res
-      .status(400)
-      .json({
-        error:
-          err.code === "LIMIT_FILE_SIZE"
-            ? "Die Datei darf maximal 20 MB groß sein."
-            : "Der Upload konnte nicht verarbeitet werden.",
-      });
+    return res.status(400).json({
+      error:
+        err.code === "LIMIT_FILE_SIZE"
+          ? translateForRequest(req, "Die Datei darf maximal 20 MB groß sein.")
+          : translateForRequest(req, "Der Upload konnte nicht verarbeitet werden."),
+    });
   if (err instanceof z.ZodError)
-    return res
-      .status(400)
-      .json({
-        error: err.issues
-          .map((i) => `${i.path.join(".")}: ${i.message}`)
-          .join("; "),
-      });
+    return res.status(400).json({
+      error: err.issues
+        .map((i) => `${i.path.join(".")}: ${translateForRequest(req, i.message)}`)
+        .join("; "),
+    });
   if (err instanceof UniqueConstraintError)
-    return res.status(409).json({ error: "Dieser Eintrag existiert bereits." });
+    return res.status(409).json({ error: translateForRequest(req, "Dieser Eintrag existiert bereits.") });
   const status = err.status || (err.type === "entity.parse.failed" ? 400 : 500);
   if (status >= 500) console.error("Request failed:", err.name, err.message);
-  res
-    .status(status)
-    .json({
-      error:
-        status >= 500
-          ? "Ein interner Fehler ist aufgetreten. Bitte erneut versuchen."
-          : err.message,
-    });
+  res.status(status).json({
+    error:
+      status >= 500
+        ? translateForRequest(
+            req,
+            "Ein interner Fehler ist aufgetreten. Bitte erneut versuchen.",
+          )
+        : translateForRequest(req, err.message),
+  });
 });
 await initializeDatabase();
 const cleanup = setInterval(

@@ -25,6 +25,7 @@ export const User = db.define("User", {
   authType: { type: D.STRING(10), defaultValue: "local" },
   externalId: { type: D.STRING(64), unique: true },
   color: { type: D.STRING(20), defaultValue: "#6366f1" },
+  language: { type: D.STRING(10), allowNull: false, defaultValue: "system" },
 });
 export const Project = db.define("Project", {
   id,
@@ -107,6 +108,7 @@ export const publicUser = (u) => ({
   disabled: u.disabled,
   authType: u.authType,
   color: u.color,
+  language: u.language,
 });
 export class DatabaseSessionStore extends session.Store {
   get(sid, cb) {
@@ -146,6 +148,13 @@ export async function initializeDatabase() {
   await db.authenticate();
   // Version 1 is an additive initial schema. Never use sync({alter:true}) on live data.
   await db.sync();
+  const users = await db.getQueryInterface().describeTable("Users");
+  if (!users.language)
+    await db.getQueryInterface().addColumn("Users", "language", {
+      type: D.STRING(10),
+      allowNull: false,
+      defaultValue: "system",
+    });
   const schema = await db.getQueryInterface().describeTable("Cards");
   if (!schema.checklist)
     await db

@@ -32,7 +32,7 @@ await new Promise(r => proxy.once("listening", r));
 await fs.mkdir("artifacts", { recursive: true });
 const browser = await chromium.launch({ args: ["--no-sandbox"] });
 const errors = [];
-const desktopContext = await browser.newContext({ viewport: { width: 1440, height: 1050 } });
+const desktopContext = await browser.newContext({ locale: "de-DE", viewport: { width: 1440, height: 1050 } });
 const page = await desktopContext.newPage();
 page.on("pageerror", (e) => errors.push(e.message));
 const base = "http://localhost:8122";
@@ -57,6 +57,15 @@ try {
   await page.screenshot({ path: "artifacts/auth-dark.png", fullPage: true });
   await page.emulateMedia({ colorScheme: "light" });
   await expectTheme(page, "light");
+  const englishSetupContext = await browser.newContext({ locale: "en-GB" });
+  const englishSetup = await englishSetupContext.newPage();
+  englishSetup.on("pageerror", e => errors.push(e.message));
+  await englishSetup.goto(base);
+  await expect(englishSetup.getByRole("heading", { name: "Let's get started.", exact: true })).toBeVisible();
+  await expect(englishSetup.locator("html")).toHaveAttribute("lang", "en");
+  await expect(englishSetup.getByLabel("Appearance", { exact: true })).toBeVisible();
+  await expect(englishSetup.getByLabel("Your name", { exact: true })).toBeVisible();
+  await englishSetupContext.close();
   await page.getByLabel("Dein Name").fill("Alex Beispiel");
   await page
     .getByLabel("E-Mail-Adresse", { exact: true })
@@ -313,6 +322,7 @@ try {
     .first()
     .click();
   const other = await browser.newPage({
+    locale: "de-DE",
     viewport: { width: 1280, height: 900 },
   });
   other.on("pageerror", (e) => errors.push(e.message));
@@ -378,6 +388,7 @@ try {
   // Device sizes; touch scrolling and touch drag on actual emulated touch hardware.
   const state = await page.context().storageState();
   const mobileContext = await browser.newContext({
+    locale: "de-DE",
     viewport: { width: 390, height: 844 },
     isMobile: true,
     hasTouch: true,
@@ -633,7 +644,7 @@ try {
   await expect(page.locator("dialog")).toHaveCount(0);
   await expect(page.getByText("0 von 7 Aufgaben erledigt", { exact: true })).toBeVisible();
   console.log("PASS: Bucket-Konflikte behalten den Entwurf und erlauben bewusstes Neuladen");
-  const restrictedContext = await browser.newContext({ colorScheme: "dark" });
+  const restrictedContext = await browser.newContext({ locale: "de-DE", colorScheme: "dark" });
   await restrictedContext.addInitScript(() => {
     for (const method of ["getItem", "setItem", "removeItem"]) {
       Storage.prototype[method] = () => { throw new DOMException("Storage disabled", "SecurityError"); };
@@ -649,6 +660,61 @@ try {
   await expectTheme(restricted, "dark");
   await restrictedContext.close();
   console.log("PASS: Dark Mode auf Handy und Tablet und Darstellung ohne Browser-Speicher");
+  const englishContext = await browser.newContext({ locale: "en-US", storageState: await page.context().storageState() });
+  const english = await englishContext.newPage();
+  english.on("pageerror", e => errors.push(e.message));
+  await english.goto(base);
+  await expect(english.getByRole("button", { name: "Create task", exact: true })).toBeVisible();
+  await expect(english.getByRole("heading", { name: "Unser erstes Projekt", exact: true })).toBeVisible();
+  await expect(english.locator("html")).toHaveAttribute("lang", "en");
+  await english.getByRole("button", { name: "Create task", exact: true }).click();
+  await expect(english.getByRole("heading", { name: "The next step.", exact: true })).toBeVisible();
+  await expect(english.getByLabel("Priority", { exact: true })).toBeVisible();
+  await expect(english.getByRole("group", { name: "Progress", exact: true })).toBeVisible();
+  await english.locator("dialog .modal-heading").getByRole("button", { name: "Close", exact: true }).click();
+  await english.getByRole("button", { name: "Edit buckets", exact: true }).click();
+  await expect(english.getByRole("heading", { name: "Board & buckets", exact: true })).toBeVisible();
+  await expect(english.getByRole("button", { name: "Add bucket", exact: true })).toBeVisible();
+  await english.getByRole("button", { name: "Cancel", exact: true }).click();
+  await english.getByRole("button", { name: "Administration", exact: true }).click();
+  await expect(english.getByRole("heading", { name: "Sign-in provider", exact: true })).toBeVisible();
+  await english.getByRole("button", { name: "Users", exact: false }).click();
+  await expect(english.getByRole("button", { name: "Create user", exact: true })).toBeVisible();
+  await english.getByRole("button", { name: "Unser erstes Projekt", exact: true }).click();
+  await english.getByRole("button", { name: "Activity", exact: true }).click();
+  await expect(english.getByText("file attached", { exact: true })).toBeVisible();
+  await english.getByRole("button", { name: "Board", exact: true }).click();
+  await english.getByRole("button", { name: "Profile settings", exact: true }).click();
+  await english.getByLabel("Language", { exact: true }).selectOption("de");
+  await english.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(english.getByRole("button", { name: "Aufgabe erstellen", exact: true })).toBeVisible();
+  await english.reload();
+  await expect(english.locator("html")).toHaveAttribute("lang", "de");
+  await english.getByRole("button", { name: "Profileinstellungen", exact: true }).click();
+  await expect(english.getByLabel("Sprache", { exact: true })).toHaveValue("de");
+  await english.getByLabel("Sprache", { exact: true }).selectOption("en");
+  await english.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(english.locator("html")).toHaveAttribute("lang", "en");
+  await english.screenshot({ path: "artifacts/board-english.png", fullPage: true });
+  // A device with a German browser must use the saved English profile choice.
+  const germanDeviceContext = await browser.newContext({ locale: "de-DE", viewport: { width: 390, height: 844 }, isMobile: true, storageState: await page.context().storageState() });
+  const germanDevice = await germanDeviceContext.newPage();
+  germanDevice.on("pageerror", e => errors.push(e.message));
+  await germanDevice.goto(base);
+  await expect(germanDevice.getByRole("button", { name: "Create task", exact: true })).toBeVisible();
+  await expect(germanDevice.locator("html")).toHaveAttribute("lang", "en");
+  await germanDevice.getByRole("button", { name: "Open menu", exact: true }).click();
+  await germanDevice.getByRole("button", { name: "Profile settings", exact: true }).click();
+  await expect(germanDevice.getByLabel("Language", { exact: true })).toHaveValue("en");
+  await germanDevice.screenshot({ path: "artifacts/profile-english-mobile.png", fullPage: true });
+  await germanDevice.getByLabel("Language", { exact: true }).selectOption("system");
+  await germanDevice.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(germanDevice.locator("html")).toHaveAttribute("lang", "de");
+  await germanDeviceContext.close();
+  await english.reload();
+  await expect(english.locator("html")).toHaveAttribute("lang", "en");
+  await englishContext.close();
+  console.log("PASS: Deutsche/englische Browsersprache, übersetzte Karten/Buckets/Admin/Verlauf und gespeicherte Profilsprache über Geräte hinweg");
   if (errors.length)
     throw new Error(`Browser runtime errors: ${errors.join("; ")}`);
   console.log("PASS: Desktop, Handy und Tablet ohne Browser-Laufzeitfehler");

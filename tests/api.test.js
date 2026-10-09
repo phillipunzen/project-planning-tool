@@ -6,7 +6,7 @@ process.env.ALLOWED_ORIGINS = "http://localhost:54734";
 process.env.DATABASE_NAME = "projektwerk_test";
 process.env.UPLOAD_DIR = "artifacts/test-uploads";
 const { app } = await import("../server/index.js");
-const { db, Setting, Invitation, Card, Board, initializeDatabase } =
+const { db, Setting, Invitation, Card, Board, User, initializeDatabase } =
   await import("../server/db.js");
 await db.sync({ force: true });
 await Setting.create({ key: "installation", value: "{}" });
@@ -117,6 +117,31 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
       403,
     );
   });
+  await t.test("profile language migrates additively, persists and cannot alter permissions", async () => {
+    const before = (await admin.call("/me")).data;
+    await db.query("ALTER TABLE `Users` DROP COLUMN `language`");
+    await initializeDatabase();
+    const migrated = (await admin.call("/me")).data;
+    assert.equal(migrated.id, before.id);
+    assert.equal(migrated.name, before.name);
+    assert.equal(migrated.language, "system");
+    assert.equal((await anonymous.call("/me", "PATCH", { language: "en" })).status, 401);
+    for (const invalid of [{ language: "fr" }, {}, { language: "en", role: "admin" }, { language: "en", id: crypto.randomUUID() }]) {
+      assert.equal((await admin.call("/me", "PATCH", invalid)).status, 400);
+    }
+    const saved = await admin.call("/me", "PATCH", { language: "en" });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.data.language, "en");
+    assert.equal(saved.data.password, undefined);
+    assert.equal((await User.findByPk(before.id)).language, "en");
+    const device = client();
+    const identity = await User.findByPk(before.id);
+    assert.equal((await device.call("/auth/login", "POST", { email: identity.email, password: "TestPw123!" })).data.language, "en");
+    const denied = await device.call(`/boards/${crypto.randomUUID()}`);
+    assert.equal(denied.status, 404);
+    assert.equal(denied.data.error, "Board not found.");
+    assert.equal((await admin.call("/me", "PATCH", { language: "system" })).status, 200);
+  });
   await t.test("create project and multiple boards", async () => {
     const created = await admin.call("/projects", "POST", {
       name: "Website Relaunch",
@@ -138,6 +163,17 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
       ).status,
       201,
     );
+  });
+  await t.test("English requests create translated defaults while retaining custom project names", async () => {
+    const custom = "Offen – Teamprojekt";
+    const result = await admin.call("/projects", "POST", { name: custom }, { "Accept-Language": "en-GB,en;q=0.9" });
+    assert.equal(result.status, 201);
+    assert.equal(result.data.name, custom);
+    const created = (await admin.call("/projects")).data.find(p => p.id === result.data.id);
+    const englishBoard = (await admin.call(`/boards/${created.Boards[0].id}`)).data;
+    assert.equal(englishBoard.name, "Project board");
+    assert.deepEqual(englishBoard.columns.map(c => c.name), ["To do", "In progress", "Review", "Done"]);
+    assert.equal((await admin.call(`/projects/${created.id}`, "DELETE")).status, 200);
   });
   await t.test("administrator can provision local accounts", async () => {
     assert.equal((await admin.call("/admin/users", "POST", {
