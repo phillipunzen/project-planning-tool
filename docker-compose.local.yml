@@ -1,0 +1,30 @@
+# Optional MariaDB server. The default docker-compose.yml uses an external DB.
+services:
+  app:
+    environment:
+      DATABASE_HOST: mariadb
+      DATABASE_PORT: 3306
+    depends_on:
+      mariadb:
+        condition: service_healthy
+  db-backup:
+    environment:
+      DATABASE_HOST: mariadb
+      DATABASE_PORT: 3306
+  mariadb:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DATABASE_NAME:-projektwerk}
+      MARIADB_USER: ${DATABASE_USER:-projektwerk}
+      MARIADB_PASSWORD: ${DATABASE_PASSWORD:?Bitte DATABASE_PASSWORD setzen}
+      MARIADB_ROOT_PASSWORD: ${DATABASE_ROOT_PASSWORD:?Nur bei lokaler MariaDB erforderlich}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+volumes:
+  mariadb-data:

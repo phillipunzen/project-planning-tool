@@ -1,0 +1,43 @@
+{
+  "name": "projektwerk",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"node --env-file=.env --watch server/index.js\" \"vite --host 0.0.0.0 --port 8110\"",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "test": "node --env-file=.env --test --test-concurrency=1 tests/api.test.js tests/auth.test.js",
+    "test:ui": "node --env-file=.env scripts/browser-test.mjs",
+    "test:compose": "node --test tests/compose.test.js"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "bcryptjs": "^3.0.2",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "express-session": "^1.18.2",
+    "helmet": "^8.1.0",
+    "ldapts": "^7.3.1",
+    "lucide-react": "^0.468.0",
+    "mariadb": "^3.4.5",
+    "multer": "^2.4.0",
+    "openid-client": "^6.8.1",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "sequelize": "^6.37.7",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "concurrently": "^9.2.1",
+    "vite": "^6.4.1"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
+  }
+}

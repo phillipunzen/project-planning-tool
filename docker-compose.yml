@@ -1,0 +1,53 @@
+x-database-environment: &database-environment
+  DATABASE_HOST: ${DATABASE_HOST:?Bitte DATABASE_HOST der externen MariaDB setzen}
+  DATABASE_PORT: ${DATABASE_PORT:-3306}
+  DATABASE_NAME: ${DATABASE_NAME:-projektwerk}
+  DATABASE_USER: ${DATABASE_USER:-projektwerk}
+  DATABASE_PASSWORD: ${DATABASE_PASSWORD:?Bitte DATABASE_PASSWORD setzen}
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8110}:3000"
+    environment:
+      <<: *database-environment
+      NODE_ENV: production
+      PORT: 3000
+      APP_URL: ${APP_URL:-http://localhost:8110}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      SESSION_SECRET: ${SESSION_SECRET:?Bitte .env mit scripts/init-env.mjs erzeugen}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - uploads:/app/uploads
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    init: true
+
+  # Optional client for backups; no database server is started by this service.
+  db-backup:
+    image: mariadb:11.4
+    profiles: ["backup"]
+    environment:
+      <<: *database-environment
+      MYSQL_PWD: ${DATABASE_PASSWORD:?Bitte DATABASE_PASSWORD setzen}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    entrypoint: ["sh", "-c"]
+    command:
+      - 'exec mariadb-dump -h "$$DATABASE_HOST" -P "$$DATABASE_PORT" -u "$$DATABASE_USER" --single-transaction --routines --triggers "$$DATABASE_NAME"'
+
+volumes:
+  uploads:

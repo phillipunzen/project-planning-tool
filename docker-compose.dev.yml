@@ -1,0 +1,4 @@
+services:
+  mariadb:
+    ports:
+      - "127.0.0.1:3317:3306"

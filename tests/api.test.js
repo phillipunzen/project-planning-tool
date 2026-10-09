@@ -1,0 +1,548 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+process.env.NODE_ENV = "test";
+process.env.ALLOWED_ORIGINS = "http://localhost:54734";
+process.env.DATABASE_NAME = "projektwerk_test";
+process.env.UPLOAD_DIR = "artifacts/test-uploads";
+const { app } = await import("../server/index.js");
+const { db, Setting, Invitation } = await import("../server/db.js");
+await db.sync({ force: true });
+await Setting.create({ key: "installation", value: "{}" });
+const server = app.listen(0, "127.0.0.1");
+await new Promise((r) => server.once("listening", r));
+const base = `http://127.0.0.1:${server.address().port}`;
+const origin = new URL(process.env.APP_URL).origin;
+function client() {
+  let cookie = "";
+  return {
+    async call(url, method = "GET", body, extra = {}) {
+      const r = await fetch(`${base}/api${url}`, {
+        method,
+        signal: AbortSignal.timeout(15000),
+        headers: {
+          ...(body instanceof FormData
+            ? {}
+            : { "Content-Type": "application/json" }),
+          Origin: origin,
+          ...(cookie ? { Cookie: cookie } : {}),
+          ...extra,
+        },
+        body:
+          body instanceof FormData
+            ? body
+            : body
+              ? JSON.stringify(body)
+              : undefined,
+        redirect: "manual",
+      });
+      if (r.headers.get("set-cookie"))
+        cookie = r.headers.get("set-cookie").split(";")[0];
+      const text = await r.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+      return { status: r.status, data, headers: r.headers };
+    },
+  };
+}
+const admin = client(),
+  viewer = client(),
+  editor = client(),
+  outsider = client(),
+  anonymous = client();
+let project, board, card, editorUser, viewerUser;
+await test("Projektwerk integration with real MariaDB", async (t) => {
+  await t.test(
+    "bootstrap is transactional and only one administrator can be created",
+    async () => {
+      const publicInfo = await anonymous.call("/public");
+      assert.equal(publicInfo.data.setupRequired, true);
+      assert.equal((await anonymous.call("/setup", "POST", {
+        name: "Too Short", email: "short@test.example", password: "123456789", sample: false,
+      })).status, 400);
+      const results = await Promise.all([
+        admin.call("/setup", "POST", {
+          name: "Test Admin",
+          email: "admin@test.example",
+          password: "TestPw123!",
+          sample: false,
+        }),
+        anonymous.call("/setup", "POST", {
+          name: "Other Admin",
+          email: "other@test.example",
+          password: "TestPw123!",
+          sample: false,
+        }),
+      ]);
+      assert.deepEqual(results.map((r) => r.status).sort(), [201, 409]);
+      if (results[0].status !== 201) {
+        await admin.call("/auth/login", "POST", {
+          email: "other@test.example",
+          password: "TestPw123!",
+        });
+      }
+      assert.equal((await anonymous.call("/public")).data.setupRequired, false);
+    },
+  );
+  await t.test("authentication and origin checks protect writes", async () => {
+    assert.equal((await outsider.call("/projects")).status, 401);
+    // The explicit preview origin reaches validation; untrusted origins do not.
+    assert.equal((await anonymous.call("/setup", "POST", {}, {Origin:"http://localhost:54734"})).status, 400);
+    for (const untrusted of ["null", "http://localhost:54735", "http://localhost.evil.example:54734"]) {
+      assert.equal((await anonymous.call("/setup", "POST", {}, {Origin:untrusted, "X-Forwarded-Host":"localhost:54734"})).status, 403);
+    }
+    assert.equal(
+      (
+        await outsider.call("/auth/login", "POST", {
+          email: "unknown@test.example",
+          password: "bad",
+        })
+      ).status,
+      401,
+    );
+    assert.equal(
+      (
+        await admin.call(
+          "/projects",
+          "POST",
+          { name: "Forbidden" },
+          { Origin: "https://evil.example" },
+        )
+      ).status,
+      403,
+    );
+  });
+  await t.test("create project and multiple boards", async () => {
+    const created = await admin.call("/projects", "POST", {
+      name: "Website Relaunch",
+      description: "Gemeinsames Projekt",
+      color: "#6366f1",
+      icon: "code",
+    });
+    assert.equal(created.status, 201);
+    project = created.data;
+    const list = await admin.call("/projects");
+    assert.equal(list.data[0].myRole, "owner");
+    board = (await admin.call(`/boards/${list.data[0].Boards[0].id}`)).data;
+    assert.equal(board.columns.length, 4);
+    assert.equal(
+      (
+        await admin.call(`/projects/${project.id}/boards`, "POST", {
+          name: "Release",
+        })
+      ).status,
+      201,
+    );
+  });
+  await t.test("administrator can provision local accounts", async () => {
+    assert.equal((await admin.call("/admin/users", "POST", {
+      name: "Too Short", email: "short@test.example", password: "123456789",
+    })).status, 400);
+    editorUser = (
+      await admin.call("/admin/users", "POST", {
+        name: "Editor",
+        email: "editor@test.example",
+        password: "EditorPw1!",
+      })
+    ).data;
+    assert.ok(editorUser.id);
+    assert.equal(editorUser.password, undefined);
+    assert.equal((await admin.call(`/admin/users/${editorUser.id}`, "PATCH", {password:"123456789"})).status, 400);
+    assert.equal((await admin.call(`/admin/users/${editorUser.id}`, "PATCH", {password:"EditorPw1!"})).status, 200);
+    await editor.call("/auth/login", "POST", {
+      email: "editor@test.example",
+      password: "EditorPw1!",
+    });
+  });
+  await t.test(
+    "invitations bind membership to the invited email and expire after acceptance",
+    async () => {
+      const invitation = await admin.call(
+        `/projects/${project.id}/invitations`,
+        "POST",
+        { email: editorUser.email, role: "editor" },
+      );
+      assert.equal(invitation.status, 201);
+      const token = new URL(invitation.data.url).searchParams.get("invite");
+      assert.equal(
+        (await outsider.call(`/invitations/${token}`)).data.email,
+        editorUser.email,
+      );
+      assert.equal(
+        (await admin.call(`/invitations/${token}/accept`, "POST", {})).status,
+        403,
+      );
+      assert.equal(
+        (await editor.call(`/invitations/${token}/accept`, "POST", {})).status,
+        200,
+      );
+      assert.equal(
+        (await editor.call(`/invitations/${token}/accept`, "POST", {})).status,
+        404,
+      );
+      const r = await admin.call(
+        `/projects/${project.id}/invitations`,
+        "POST",
+        { email: "viewer@test.example", role: "viewer" },
+      );
+      const viewerToken = new URL(r.data.url).searchParams.get("invite");
+      assert.equal((await viewer.call(`/invitations/${viewerToken}/accept`, "POST", {
+        name: "Viewer", password: "123456789",
+      })).status, 400);
+      const accepted = await viewer.call(
+        `/invitations/${viewerToken}/accept`,
+        "POST",
+        { name: "Viewer", password: "ViewerPw1!" },
+      );
+      assert.equal(accepted.status, 200);
+      viewerUser = accepted.data;
+      const expired = await admin.call(
+        `/projects/${project.id}/invitations`,
+        "POST",
+        { email: "expired@test.example", role: "editor" },
+      );
+      const expiredToken = new URL(expired.data.url).searchParams.get("invite");
+      await Invitation.update(
+        { expiresAt: new Date(Date.now() - 1000) },
+        { where: { id: expired.data.id } },
+      );
+      assert.equal(
+        (await outsider.call(`/invitations/${expiredToken}`)).status,
+        404,
+      );
+    },
+  );
+  await t.test(
+    "cards persist priority, labels, due dates and checklist",
+    async () => {
+      const r = await editor.call(`/boards/${board.id}/cards`, "POST", {
+        title: "Implementierung",
+        description: "Details",
+        columnId: board.columns[0].id,
+        priority: "high",
+        dueDate: "2026-11-01",
+        assigneeId: editorUser.id,
+        labels: ["Entwicklung"],
+        checklist: [
+          { id: crypto.randomUUID(), text: "API bereitstellen", done: true },
+          { id: crypto.randomUUID(), text: "UI prüfen", done: false },
+        ],
+      });
+      assert.equal(r.status, 201);
+      card = r.data;
+      const loaded = (await viewer.call(`/boards/${board.id}`)).data;
+      assert.equal(loaded.cards[0].priority, "high");
+      assert.equal(loaded.cards[0].checklist.length, 2);
+      assert.equal(loaded.cards[0].assignee.name, "Editor");
+      board = loaded;
+    },
+  );
+  await t.test(
+    "project permissions protect board reads, writes and admin settings",
+    async () => {
+      assert.equal((await outsider.call(`/boards/${board.id}`)).status, 401);
+      await outsider.call("/invitations/not-a-token");
+      const registered = await admin.call("/admin/users", "POST", {
+        name: "Outsider",
+        email: "outsider@test.example",
+        password: "OutsiderPassword123!",
+      });
+      assert.equal(registered.status, 201);
+      await outsider.call("/auth/login", "POST", {
+        email: "outsider@test.example",
+        password: "OutsiderPassword123!",
+      });
+      assert.equal((await outsider.call(`/boards/${board.id}`)).status, 403);
+      assert.equal(
+        (await outsider.call(`/cards/${card.id}/comments`)).status,
+        403,
+      );
+      assert.equal(
+        (
+          await viewer.call(`/boards/${board.id}/cards`, "POST", {
+            title: "No",
+            columnId: board.columns[0].id,
+          })
+        ).status,
+        403,
+      );
+      assert.equal((await viewer.call("/admin/auth")).status, 403);
+      assert.equal(
+        (
+          await editor.call(`/projects/${project.id}/invitations`, "POST", {
+            email: "illegal@test.example",
+          })
+        ).status,
+        403,
+      );
+    },
+  );
+  await t.test("simultaneous moves cannot overwrite each other", async () => {
+    const body = {
+      cardId: card.id,
+      columnId: board.columns[1].id,
+      index: 0,
+      revision: board.revision,
+    };
+    const results = await Promise.all([
+      editor.call(`/boards/${board.id}/move`, "POST", body),
+      admin.call(`/boards/${board.id}/move`, "POST", body),
+    ]);
+    assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
+    board = (await editor.call(`/boards/${board.id}`)).data;
+    assert.equal(board.cards[0].columnId, board.columns[1].id);
+  });
+  await t.test("stale task edits and deletions are rejected", async () => {
+    const latest = board.cards[0];
+    assert.equal(
+      (
+        await editor.call(`/cards/${card.id}`, "PATCH", {
+          ...latest,
+          title: "Aktualisiert",
+          version: latest.version,
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await admin.call(`/cards/${card.id}`, "PATCH", {
+          ...latest,
+          title: "Lost update",
+          version: latest.version,
+        })
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await editor.call(`/cards/${card.id}`, "DELETE", {
+          version: latest.version,
+        })
+      ).status,
+      409,
+    );
+    board = (await editor.call(`/boards/${board.id}`)).data;
+    card = board.cards[0];
+    assert.equal(card.title, "Aktualisiert");
+  });
+  await t.test(
+    "nonmember cannot be assigned and columns containing tasks cannot be removed",
+    async () => {
+      assert.equal(
+        (
+          await editor.call(`/cards/${card.id}`, "PATCH", {
+            ...card,
+            assigneeId: crypto.randomUUID(),
+          })
+        ).status,
+        400,
+      );
+      assert.equal(
+        (
+          await editor.call(`/boards/${board.id}`, "PATCH", {
+            revision: board.revision,
+            columns: board.columns.filter((c) => c.id !== card.columnId),
+          })
+        ).status,
+        400,
+      );
+      assert.equal(
+        (
+          await editor.call(`/boards/${board.id}`, "PATCH", {
+            revision: board.revision,
+            columns: [board.columns[0], board.columns[0]],
+          })
+        ).status,
+        400,
+      );
+    },
+  );
+  await t.test("comments are shared and recorded in activity", async () => {
+    assert.equal(
+      (
+        await editor.call(`/cards/${card.id}/comments`, "POST", {
+          body: "Status: bereit für Review.",
+        })
+      ).status,
+      201,
+    );
+    assert.equal(
+      (await viewer.call(`/cards/${card.id}/comments`)).data[0].body,
+      "Status: bereit für Review.",
+    );
+    assert.equal(
+      (await viewer.call(`/cards/${card.id}/comments`, "POST", { body: "No" }))
+        .status,
+      403,
+    );
+    const activity = (await viewer.call(`/boards/${board.id}/activity`)).data;
+    assert.ok(activity.some((a) => a.action === "Kommentar hinzugefügt"));
+    assert.ok(activity.some((a) => a.action.startsWith("Status geändert")));
+  });
+  await t.test(
+    "uploads have authenticated downloads, safe file types and project permissions",
+    async () => {
+      const form = new FormData();
+      form.append(
+        "file",
+        new Blob(["Projektplan"], { type: "text/plain" }),
+        "Projektübersicht.txt",
+      );
+      const r = await editor.call(
+        `/cards/${card.id}/attachments`,
+        "POST",
+        form,
+      );
+      assert.equal(r.status, 201);
+      const file = r.data;
+      assert.equal(
+        (await viewer.call(`/cards/${card.id}/attachments`)).data[0].name,
+        "Projektübersicht.txt",
+      );
+      const download = await viewer.call(`/attachments/${file.id}/download`);
+      assert.equal(download.status, 200);
+      assert.equal(download.data, "Projektplan");
+      assert.match(download.headers.get("content-disposition"), /^attachment;/);
+      assert.equal(download.headers.get("x-content-type-options"), "nosniff");
+      assert.equal(
+        (await outsider.call(`/attachments/${file.id}/download`)).status,
+        403,
+      );
+      assert.equal(
+        (await viewer.call(`/attachments/${file.id}`, "DELETE")).status,
+        403,
+      );
+      const html = new FormData();
+      html.append("file", new Blob(["<script>evil()</script>"]), "evil.html");
+      assert.equal(
+        (await editor.call(`/cards/${card.id}/attachments`, "POST", html))
+          .status,
+        400,
+      );
+      const big = new FormData();
+      big.append(
+        "file",
+        new Blob([new Uint8Array(20 * 1024 * 1024 + 1)]),
+        "large.txt",
+      );
+      assert.equal(
+        (await editor.call(`/cards/${card.id}/attachments`, "POST", big))
+          .status,
+        400,
+      );
+      assert.equal(
+        (await editor.call(`/attachments/${file.id}`, "DELETE")).status,
+        200,
+      );
+    },
+  );
+  await t.test(
+    "removing a member revokes access and clears assignment",
+    async () => {
+      assert.equal(
+        (
+          await admin.call(
+            `/projects/${project.id}/members/${editorUser.id}`,
+            "DELETE",
+          )
+        ).status,
+        200,
+      );
+      assert.equal((await editor.call(`/boards/${board.id}`)).status, 403);
+      board = (await admin.call(`/boards/${board.id}`)).data;
+      card = board.cards[0];
+      assert.equal(card.assigneeId, null);
+    },
+  );
+  await t.test(
+    "authentication configuration hides and encrypts secrets and preserves blank values",
+    async () => {
+      const config = {
+        provider: "local",
+        oidc: {
+          issuer: "https://identity.example",
+          clientId: "client",
+          secret: "sensitive-secret",
+          name: "SSO",
+        },
+        ldap: { bindPassword: "sensitive-bind-password" },
+      };
+      assert.equal(
+        (await admin.call("/admin/auth", "PUT", config)).status,
+        200,
+      );
+      const read = (await admin.call("/admin/auth")).data;
+      assert.equal(read.oidc.secret, "");
+      assert.equal(read.oidc.hasSecret, true);
+      assert.equal(read.ldap.bindPassword, "");
+      const stored = await Setting.findByPk("authentication");
+      assert.ok(!stored.value.includes("sensitive"));
+      assert.ok(!stored.value.includes("identity"));
+      await admin.call("/admin/auth", "PUT", read);
+      assert.equal((await admin.call("/admin/auth")).data.oidc.hasSecret, true);
+      assert.equal(
+        (
+          await admin.call("/admin/auth", "PUT", {
+            ...read,
+            provider: "oidc",
+            oidc: { ...read.oidc, issuer: "http://identity.example" },
+          })
+        ).status,
+        400,
+      );
+      assert.equal(
+        (
+          await admin.call("/admin/auth", "PUT", {
+            ...read,
+            provider: "ldap",
+            ldap: {
+              ...read.ldap,
+              url: "ldap://dc.example",
+              baseDn: "DC=example",
+              bindDn: "service",
+              startTls: false,
+            },
+          })
+        ).status,
+        400,
+      );
+    },
+  );
+  await t.test("disabled user sessions stop working immediately", async () => {
+    assert.equal(
+      (
+        await admin.call(`/admin/users/${viewerUser.id}`, "PATCH", {
+          disabled: true,
+        })
+      ).status,
+      200,
+    );
+    assert.equal((await viewer.call("/me")).status, 401);
+    const me = (await admin.call("/me")).data;
+    assert.equal(
+      (await admin.call(`/admin/users/${me.id}`, "PATCH", { disabled: true }))
+        .status,
+      400,
+    );
+  });
+  await t.test(
+    "project deletion cascades and logout destroys sessions",
+    async () => {
+      assert.equal(
+        (await admin.call(`/projects/${project.id}`, "DELETE")).status,
+        200,
+      );
+      assert.equal((await admin.call(`/boards/${board.id}`)).status, 404);
+      assert.equal((await admin.call("/auth/logout", "POST")).status, 200);
+      assert.equal((await admin.call("/me")).status, 401);
+    },
+  );
+});
+await new Promise((r) => server.close(r));
+await db.close();
+await fs.rm("artifacts/test-uploads", { recursive: true, force: true });
