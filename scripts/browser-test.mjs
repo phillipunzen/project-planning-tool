@@ -32,14 +32,31 @@ await new Promise(r => proxy.once("listening", r));
 await fs.mkdir("artifacts", { recursive: true });
 const browser = await chromium.launch({ args: ["--no-sandbox"] });
 const errors = [];
-const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
+const desktopContext = await browser.newContext({ viewport: { width: 1440, height: 1050 } });
+const page = await desktopContext.newPage();
 page.on("pageerror", (e) => errors.push(e.message));
 const base = "http://localhost:8122";
 try {
+  await page.emulateMedia({ colorScheme: "dark" });
   await page.goto(base);
   await expect(
     page.getByRole("heading", { name: "Lass uns loslegen." }),
   ).toBeVisible();
+  const expectTheme = async (target, theme) => {
+    await expect(target.locator("html")).toHaveAttribute("data-theme", theme);
+    await expect.poll(() => target.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe(theme);
+  };
+  await expectTheme(page, "dark");
+  await page.getByLabel("Darstellung", { exact: true }).selectOption("light");
+  await expectTheme(page, "light");
+  await page.reload();
+  await expectTheme(page, "light");
+  await expect(page.getByLabel("Darstellung", { exact: true })).toHaveValue("light");
+  await page.getByLabel("Darstellung", { exact: true }).selectOption("system");
+  await expectTheme(page, "dark");
+  await page.screenshot({ path: "artifacts/auth-dark.png", fullPage: true });
+  await page.emulateMedia({ colorScheme: "light" });
+  await expectTheme(page, "light");
   await page.getByLabel("Dein Name").fill("Alex Beispiel");
   await page
     .getByLabel("E-Mail-Adresse", { exact: true })
@@ -52,6 +69,33 @@ try {
     page.getByRole("heading", { name: "Unser erstes Projekt", exact: true }),
   ).toBeVisible();
   await expect(page.locator(".task-card")).toHaveCount(6);
+  const lightCard = await page.locator(".task-card").first().evaluate(el => getComputedStyle(el).backgroundColor);
+  await page.getByLabel("Darstellung", { exact: true }).selectOption("dark");
+  await expectTheme(page, "dark");
+  const darkCard = await page.locator(".task-card").first().evaluate(el => getComputedStyle(el).backgroundColor);
+  if (darkCard === lightCard) throw new Error("Kanban cards did not switch appearance");
+  await expect(page.locator(".kanban-column").first()).toHaveCSS("background-color", "rgb(32, 43, 61)");
+  await expect(page.locator(".button.secondary").first()).toHaveCSS("background-color", "rgb(28, 38, 56)");
+  await page.screenshot({ path: "artifacts/board-dark-desktop.png", fullPage: true });
+  await page.getByRole("button", { name: "Aufgabe erstellen", exact: true }).click();
+  await expect(page.locator("dialog")).toBeVisible();
+  const fieldBackground = await page.getByLabel("Titel", { exact: true }).evaluate(el => getComputedStyle(el).backgroundColor);
+  const dialogBackground = await page.locator("dialog").evaluate(el => getComputedStyle(el).backgroundColor);
+  if (fieldBackground !== darkCard || dialogBackground !== darkCard) throw new Error("Dark fields and dialogs have inconsistent surfaces");
+  await page.screenshot({ path: "artifacts/card-dark-desktop.png", fullPage: true });
+  await page.locator("dialog .modal-heading").getByRole("button", { name: "Schließen", exact: true }).click();
+  // A second tab must receive explicit preferences without losing its own state.
+  const themeTab = await page.context().newPage();
+  themeTab.on("pageerror", e => errors.push(e.message));
+  await themeTab.goto(base);
+  await expectTheme(themeTab, "dark");
+  await page.getByLabel("Darstellung", { exact: true }).selectOption("light");
+  await expectTheme(themeTab, "light");
+  await themeTab.close();
+  await page.reload();
+  await expectTheme(page, "light");
+  await page.getByLabel("Darstellung", { exact: true }).selectOption("system");
+  console.log("PASS: Darstellung auf Anmeldung und Board, Systemwechsel, gespeicherte Auswahl, Dialoge und Tab-Synchronisierung");
   await page.screenshot({
     path: "artifacts/board-desktop.png",
     fullPage: true,
@@ -315,6 +359,7 @@ try {
   await page.getByLabel("Aufgaben suchen").fill("UI-Test");
   await expect(page.locator(".task-card")).toHaveCount(1);
   await page.getByLabel("Aufgaben suchen").fill("");
+  await page.getByLabel("Darstellung", { exact: true }).selectOption("dark");
   await page
     .getByRole("button", { name: "Administration", exact: true })
     .click();
@@ -322,11 +367,13 @@ try {
   await expect(page.getByLabel("Issuer-URL")).toBeVisible();
   await page.getByText("Active Directory", { exact: true }).click();
   await expect(page.getByLabel("LDAP-Server")).toBeVisible();
+  await page.screenshot({ path: "artifacts/admin-dark.png", fullPage: true });
   await page.getByRole("button", { name: /Benutzer/ }).click();
   await expect(page.locator(".users-table tbody tr")).toHaveCount(2);
   await page
     .getByRole("button", { name: "Unser erstes Projekt", exact: true })
     .click();
+  await page.getByLabel("Darstellung", { exact: true }).selectOption("system");
   console.log("PASS: Listenansicht, Verlauf, Suche und Administration");
   // Device sizes; touch scrolling and touch drag on actual emulated touch hardware.
   const state = await page.context().storageState();
@@ -468,6 +515,11 @@ try {
   console.log(
     "PASS: Prozentfortschritt gespeichert, geteilt und auf Desktop und Handy bearbeitet",
   );
+  await mobile.getByLabel("Darstellung", { exact: true }).selectOption("dark");
+  await expectTheme(mobile, "dark");
+  await mobile.reload();
+  await expectTheme(mobile, "dark");
+  await mobile.screenshot({ path: "artifacts/board-dark-mobile.png", fullPage: true });
   // Bucket editing must work with touch and keep completion independent of order.
   const doneSummary = await mobile
     .getByText(/von 7 Aufgaben erledigt/)
@@ -581,6 +633,22 @@ try {
   await expect(page.locator("dialog")).toHaveCount(0);
   await expect(page.getByText("0 von 7 Aufgaben erledigt", { exact: true })).toBeVisible();
   console.log("PASS: Bucket-Konflikte behalten den Entwurf und erlauben bewusstes Neuladen");
+  const restrictedContext = await browser.newContext({ colorScheme: "dark" });
+  await restrictedContext.addInitScript(() => {
+    for (const method of ["getItem", "setItem", "removeItem"]) {
+      Storage.prototype[method] = () => { throw new DOMException("Storage disabled", "SecurityError"); };
+    }
+  });
+  const restricted = await restrictedContext.newPage();
+  restricted.on("pageerror", e => errors.push(e.message));
+  await restricted.goto(base);
+  await expectTheme(restricted, "dark");
+  await restricted.getByLabel("Darstellung", { exact: true }).selectOption("light");
+  await expectTheme(restricted, "light");
+  await restricted.getByLabel("Darstellung", { exact: true }).selectOption("system");
+  await expectTheme(restricted, "dark");
+  await restrictedContext.close();
+  console.log("PASS: Dark Mode auf Handy und Tablet und Darstellung ohne Browser-Speicher");
   if (errors.length)
     throw new Error(`Browser runtime errors: ${errors.join("; ")}`);
   console.log("PASS: Desktop, Handy und Tablet ohne Browser-Laufzeitfehler");

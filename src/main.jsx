@@ -70,6 +70,7 @@ import {
   Inbox,
 } from "lucide-react";
 import "./styles.css";
+import { ThemeProvider, ThemeControl } from "./theme.jsx";
 import { CardAutosave } from "./card-autosave.js";
 async function api(url, options = {}) {
   const response = await fetch(`/api${url}`, {
@@ -158,7 +159,8 @@ function Avatar({ user, size = "normal" }) {
       title={user?.name}
       style={{
         background: `${user?.color || "#6366f1"}18`,
-        color: user?.color || "#6366f1",
+        "--avatar-color": user?.color || "#6366f1",
+        color: "var(--avatar-text, var(--avatar-color))",
       }}
     >
       {initials(user?.name)}
@@ -170,7 +172,11 @@ function ProjectIcon({ project }) {
   return (
     <span
       className="project-icon"
-      style={{ background: `${project.color}16`, color: project.color }}
+      style={{
+        background: `${project.color}16`,
+        "--project-color": project.color,
+        color: "var(--project-icon-text, var(--project-color))",
+      }}
     >
       <Icon size={18} />
     </span>
@@ -448,6 +454,7 @@ function App() {
   if (loading)
     return (
       <div className="initial-loading">
+        <ThemeControl floating />
         <Brand />
         <Spinner />
         <p>Dein Arbeitsbereich wird geladen …</p>
@@ -456,6 +463,7 @@ function App() {
   if (fatal)
     return (
       <div className="initial-loading">
+        <ThemeControl floating />
         <Brand />
         <Empty icon={AlertCircle} title="Verbindung unterbrochen">
           {fatal}
@@ -467,28 +475,34 @@ function App() {
     );
   if (invite)
     return (
-      <InviteScreen
-        token={invite}
-        user={user}
-        publicInfo={publicInfo}
-        onLogin={(u) => setUser(u)}
-        onDone={async (u) => {
-          setUser(u);
-          setInvite(null);
-          history.replaceState(null, "", "/");
-          await boot();
-        }}
-      />
+      <>
+        <ThemeControl floating />
+        <InviteScreen
+          token={invite}
+          user={user}
+          publicInfo={publicInfo}
+          onLogin={(u) => setUser(u)}
+          onDone={async (u) => {
+            setUser(u);
+            setInvite(null);
+            history.replaceState(null, "", "/");
+            await boot();
+          }}
+        />
+      </>
     );
   if (!user)
     return (
-      <AuthScreen
-        info={publicInfo}
-        onSuccess={async (u) => {
-          setUser(u);
-          await boot();
-        }}
-      />
+      <>
+        <ThemeControl floating />
+        <AuthScreen
+          info={publicInfo}
+          onSuccess={async (u) => {
+            setUser(u);
+            await boot();
+          }}
+        />
+      </>
     );
   return (
     <div className="app-shell">
@@ -641,6 +655,7 @@ function App() {
             </strong>
           </div>
           <div className="topbar-right">
+            <ThemeControl />
             <span className="connection-status">
               <i /> Gemeinsam planen
             </span>
@@ -3712,4 +3727,8 @@ function UserModal({ editedUser, currentUser, onClose, onSaved }) {
     </Modal>
   );
 }
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(
+  <ThemeProvider>
+    <App />
+  </ThemeProvider>,
+);
