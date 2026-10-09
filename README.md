@@ -12,6 +12,7 @@ Repository: [phillipunzen/project-planning-tool](https://github.com/phillipunzen
 - Checklisten mit einzelnen Punkten und Fortschrittsanzeige.
 - Manueller Gesamtfortschritt pro Aufgabe mit fünf Buttons: 0 %, 25 %, 50 %, 75 % und 100 %. Anzeige auf Kanban-Karten und in der Liste; unabhängig von Statusspalte und Checkliste. Änderungen erscheinen im Board-Verlauf.
 - Dateianhänge bis 20 MB pro Datei. Downloads sind durch Projektmitgliedschaft geschützt und werden als Download ausgeliefert.
+- Bestehende Aufgabendetails speichern automatisch: Prozent-Buttons, Auswahlfelder und Checklisten direkt, Texte nach einer Sekunde Schreibpause oder beim Verlassen des Feldes. Beim Schließen werden ausstehende Änderungen gespeichert; Fehler und Konflikte bleiben sichtbar. Neue Aufgaben werden einmal mit „Aufgabe erstellen“ angelegt.
 - Kommentare als Statusupdates und chronologischer Änderungsverlauf pro Board.
 - Kanban-, Listenansicht, Suche, Prioritätsfilter und persönliche Aufgabenübersicht.
 - Projekteigentümer, Bearbeiter und Leser. Administrationsrechte gewähren keinen automatischen Zugriff auf fremde Projekte.

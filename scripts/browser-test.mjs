@@ -56,7 +56,9 @@ try {
     path: "artifacts/board-desktop.png",
     fullPage: true,
   });
-  console.log("PASS: Registrierung über weitergeleitete Vorschauadresse und Beispielboard");
+  console.log(
+    "PASS: Registrierung über weitergeleitete Vorschauadresse und Beispielboard",
+  );
   // Drag between columns with the desktop mouse.
   const firstCard = page.locator(".task-card").filter({
     has: page.getByRole("button", {
@@ -137,8 +139,13 @@ try {
   await progressButtons
     .getByRole("button", { name: "75 %", exact: true })
     .click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Alle Änderungen gespeichert" }),
+  ).toBeVisible();
+  await expect(page.locator("dialog")).toHaveCount(1);
   await page
-    .getByRole("button", { name: "Änderungen speichern", exact: true })
+    .locator("dialog .modal-heading")
+    .getByRole("button", { name: "Schließen", exact: true })
     .click();
   await expect(page.locator("dialog")).toHaveCount(0);
   await page.reload();
@@ -154,6 +161,67 @@ try {
       .getByRole("group", { name: "Fortschritt" })
       .getByRole("button", { name: "75 %", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
+  const updates = [];
+  const trackUpdates = (request) => {
+    if (request.method() === "PATCH" && request.url().includes("/api/cards/"))
+      updates.push(request.postDataJSON());
+  };
+  page.on("request", trackUpdates);
+  const description = page.getByLabel("Beschreibung", { exact: true });
+  await description.fill("Zwischenstand");
+  await page.waitForTimeout(300);
+  assertNoEarlyTextSave: {
+    if (updates.some((body) => "description" in body))
+      throw new Error("Text was saved during typing");
+  }
+  await description.fill("Fertige Beschreibung");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Alle Änderungen gespeichert" }),
+  ).toBeVisible();
+  if (updates.filter((body) => "description" in body).length !== 1)
+    throw new Error("Text debounce did not coalesce changes");
+  await description.fill("Beim Schließen speichern");
+  await page
+    .locator("dialog .modal-heading")
+    .getByRole("button", { name: "Schließen", exact: true })
+    .click();
+  await expect(page.locator("dialog")).toHaveCount(0);
+  page.off("request", trackUpdates);
+  await page
+    .getByRole("button", { name: "UI-Test mit Checkliste", exact: true })
+    .click();
+  await expect(description).toHaveValue("Beim Schließen speichern");
+  // A failed request keeps the draft in the dialog and offers an explicit retry.
+  await page.route("**/api/cards/*", async (route) => {
+    if (route.request().method() === "PATCH")
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Test: Speichern fehlgeschlagen" }),
+      });
+    else await route.continue();
+  });
+  await page
+    .getByRole("group", { name: "Fortschritt" })
+    .getByRole("button", { name: "50 %", exact: true })
+    .click();
+  await expect(
+    page.getByText("Test: Speichern fehlgeschlagen", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("group", { name: "Fortschritt" })
+    .getByRole("button", { name: "75 %", exact: true })
+    .click();
+  await page.unroute("**/api/cards/*");
+  await page
+    .getByRole("button", { name: "Erneut versuchen", exact: true })
+    .click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Alle Änderungen gespeichert" }),
+  ).toBeVisible();
+  console.log(
+    "PASS: Automatisches Speichern, Textpause, Schließen und Wiederholung nach Fehler",
+  );
   await page.getByRole("button", { name: /Anhänge/ }).click();
   await page.locator("input[type=file]").setInputFiles({
     name: "projektplan.txt",
@@ -353,7 +421,10 @@ try {
     .getByRole("button", { name: "Aufgabe erstellen", exact: true })
     .click();
   await expect(mobile.getByLabel("Titel", { exact: true })).toBeVisible();
-  await mobile.getByRole("button", { name: "Schließen", exact: true }).click();
+  await mobile
+    .locator("dialog .modal-heading")
+    .getByRole("button", { name: "Schließen", exact: true })
+    .click();
   await mobile
     .locator(".kanban-column")
     .getByRole("button", { name: "UI-Test mit Checkliste", exact: true })
@@ -371,8 +442,14 @@ try {
     path: "artifacts/card-progress-mobile.png",
     fullPage: true,
   });
+  await expect(
+    mobile
+      .getByRole("status")
+      .filter({ hasText: "Alle Änderungen gespeichert" }),
+  ).toBeVisible();
   await mobile
-    .getByRole("button", { name: "Änderungen speichern", exact: true })
+    .locator("dialog .modal-heading")
+    .getByRole("button", { name: "Schließen", exact: true })
     .click();
   await expect(mobile.locator("dialog")).toHaveCount(0);
   await mobile
@@ -384,7 +461,10 @@ try {
       .getByRole("group", { name: "Fortschritt" })
       .getByRole("button", { name: "100 %", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
-  await mobile.getByRole("button", { name: "Schließen", exact: true }).click();
+  await mobile
+    .locator("dialog .modal-heading")
+    .getByRole("button", { name: "Schließen", exact: true })
+    .click();
   console.log(
     "PASS: Prozentfortschritt gespeichert, geteilt und auf Desktop und Handy bearbeitet",
   );
@@ -397,6 +477,24 @@ try {
   if (errors.length)
     throw new Error(`Browser runtime errors: ${errors.join("; ")}`);
   console.log("PASS: Desktop, Handy und Tablet ohne Browser-Laufzeitfehler");
+} catch (error) {
+  console.log(
+    "Browser failure state:",
+    await page.evaluate(() => ({
+      dialogs: document.querySelectorAll("dialog").length,
+      labels: [...document.querySelectorAll("dialog label")].map(
+        (l) => l.textContent,
+      ),
+      errors: [...document.querySelectorAll(".form-error")].map(
+        (e) => e.textContent,
+      ),
+    })),
+  );
+  await page.screenshot({
+    path: "artifacts/browser-failure.png",
+    fullPage: true,
+  });
+  throw error;
 } finally {
   await browser.close();
   await new Promise((r) => proxy.close(r));

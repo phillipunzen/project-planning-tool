@@ -341,6 +341,74 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
     },
   );
   await t.test(
+    "partial task saves retain other fields and return the new version",
+    async () => {
+      const before = card;
+      const saved = await editor.call(`/cards/${card.id}`, "PATCH", {
+        progress: 25,
+        version: before.version,
+      });
+      assert.equal(saved.status, 200);
+      assert.equal(saved.data.version, before.version + 1);
+      board = (await editor.call(`/boards/${board.id}`)).data;
+      card = board.cards.find((c) => c.id === before.id);
+      assert.equal(card.progress, 25);
+      for (const key of [
+        "title",
+        "description",
+        "columnId",
+        "priority",
+        "labels",
+        "checklist",
+        "dueDate",
+        "assigneeId",
+      ])
+        assert.deepEqual(card[key], before[key]);
+      assert.equal(
+        (
+          await editor.call(`/cards/${card.id}`, "PATCH", {
+            progress: 50,
+            version: before.version,
+          })
+        ).status,
+        409,
+      );
+      assert.equal(
+        (await editor.call(`/cards/${card.id}`, "PATCH", { progress: 50 }))
+          .status,
+        400,
+      );
+      assert.equal(
+        (
+          await viewer.call(`/cards/${card.id}`, "PATCH", {
+            progress: 50,
+            version: card.version,
+          })
+        ).status,
+        403,
+      );
+      assert.equal(
+        (
+          await editor.call(`/cards/${card.id}`, "PATCH", {
+            title: "",
+            version: card.version,
+          })
+        ).status,
+        400,
+      );
+      const duplicate = { id: crypto.randomUUID(), text: "Punkt", done: false };
+      assert.equal(
+        (
+          await editor.call(`/cards/${card.id}`, "PATCH", {
+            checklist: [duplicate, duplicate],
+            version: card.version,
+          })
+        ).status,
+        400,
+      );
+    },
+  );
+  await t.test(
     "project permissions protect board reads, writes and admin settings",
     async () => {
       assert.equal((await outsider.call(`/boards/${board.id}`)).status, 401);

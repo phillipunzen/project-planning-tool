@@ -917,6 +917,22 @@ fieldset:disabled {
 .completion-field {
   margin: 0 0 24px;
 }
+.autosave-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-height: 24px;
+  margin: -3px 0 16px;
+  color: #667085;
+  font-size: 12px;
+}
+.autosave-saved {
+  color: #25865c;
+}
+.autosave-error {
+  color: #c04646;
+}
 .completion-field > span {
   display: block;
   margin-bottom: 7px;

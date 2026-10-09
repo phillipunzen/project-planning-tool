@@ -68,6 +68,7 @@ import {
   Inbox,
 } from "lucide-react";
 import "./styles.css";
+import { CardAutosave } from "./card-autosave.js";
 async function api(url, options = {}) {
   const response = await fetch(`/api${url}`, {
     credentials: "same-origin",
@@ -191,7 +192,10 @@ function Modal({ title, subtitle, onClose, children, wide = false }) {
     <dialog
       ref={ref}
       className={`modal ${wide ? "wide" : ""}`}
-      onCancel={onClose}
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -950,6 +954,7 @@ function App() {
           members={members}
           user={user}
           canEdit={canEdit}
+          onChanged={() => refreshBoard()}
           onClose={() => {
             setModal(null);
             refreshBoard();
@@ -2206,6 +2211,7 @@ function CardModal({
   members,
   user,
   canEdit,
+  onChanged,
   onClose,
   onSaved,
   notify,
@@ -2232,8 +2238,54 @@ function CardModal({
     [newItem, setNewItem] = useState(""),
     [tab, setTab] = useState("details"),
     [uploading, setUploading] = useState(false),
-    [confirmDelete, setConfirmDelete] = useState(false);
-  const field = (key, value) => setData((d) => ({ ...d, [key]: value }));
+    [confirmDelete, setConfirmDelete] = useState(false),
+    [saveStatus, setSaveStatus] = useState("saved");
+  const autosaveRef = useRef(null);
+  function bodyFields(fields) {
+    const body = { ...fields };
+    if ("dueDate" in body) body.dueDate ||= null;
+    if ("assigneeId" in body) body.assigneeId ||= null;
+    if ("labels" in body)
+      body.labels = [
+        ...new Set(
+          body.labels
+            .split(",")
+            .map((l) => l.trim())
+            .filter(Boolean),
+        ),
+      ];
+    return body;
+  }
+  if (card && canEdit && !autosaveRef.current) {
+    autosaveRef.current = new CardAutosave(defaults(card), {
+      persist: async (fields, version) => {
+        const result = await api(`/cards/${card.id}`, {
+          method: "PATCH",
+          body: { ...bodyFields(fields), version },
+        });
+        return result.version;
+      },
+      onStatus: setSaveStatus,
+      onError: (e) => {
+        setError(e.message);
+        setConflict(e.status === 409);
+      },
+      onSaved: (version) => {
+        setData((d) => ({ ...d, version }));
+        setError("");
+        onChanged();
+      },
+    });
+  }
+  const autosave = autosaveRef.current;
+  useEffect(() => () => autosave?.dispose(), [autosave]);
+  const field = (key, value, deferred = false) => {
+    setData((d) => ({ ...d, [key]: value }));
+    autosave?.change(key, value, deferred);
+  };
+  async function close() {
+    if (!autosave || (await autosave.flush())) onClose();
+  }
   const fileRef = useRef();
   useEffect(() => {
     if (!card) return;
@@ -2249,21 +2301,15 @@ function CardModal({
   }, [card?.id]);
   async function submit(e) {
     e.preventDefault();
+    if (autosave) {
+      await autosave.flush();
+      return;
+    }
     setBusy(true);
     setError("");
     try {
       const body = {
-        ...data,
-        dueDate: data.dueDate || null,
-        assigneeId: data.assigneeId || null,
-        labels: [
-          ...new Set(
-            data.labels
-              .split(",")
-              .map((l) => l.trim())
-              .filter(Boolean),
-          ),
-        ],
+        ...bodyFields(data),
       };
       await api(card ? `/cards/${card.id}` : `/boards/${board.id}/cards`, {
         method: card ? "PATCH" : "POST",
@@ -2278,10 +2324,13 @@ function CardModal({
   }
   async function reload() {
     try {
+      await autosave?.flight;
       const latest = await api(`/boards/${board.id}`);
       const found = latest.cards.find((c) => c.id === card.id);
       if (!found) throw new Error("Diese Aufgabe wurde gelöscht.");
-      setData(defaults(found));
+      const fresh = defaults(found);
+      autosave?.reset(fresh);
+      setData(fresh);
       setConflict(false);
       setError("");
     } catch (e) {
@@ -2291,9 +2340,13 @@ function CardModal({
   async function remove() {
     setBusy(true);
     try {
+      if (autosave && !(await autosave.flush())) {
+        setBusy(false);
+        return;
+      }
       await api(`/cards/${card.id}`, {
         method: "DELETE",
-        body: { version: data.version },
+        body: { version: autosave?.version ?? data.version },
       });
       onSaved();
     } catch (e) {
@@ -2369,7 +2422,7 @@ function CardModal({
           ? `In ${board.name}`
           : "Eine gute Aufgabe macht klar, was zu tun ist."
       }
-      onClose={onClose}
+      onClose={close}
     >
       <div className="detail-tabs">
         <button
@@ -2394,6 +2447,40 @@ function CardModal({
           Kommentare <span>{comments.length}</span>
         </button>
       </div>
+      {card && canEdit && (
+        <div
+          className={`autosave-status autosave-${saveStatus}`}
+          role="status"
+          aria-live="polite"
+        >
+          {saveStatus === "saving" ? (
+            <Spinner />
+          ) : saveStatus === "saved" ? (
+            <Check size={14} />
+          ) : (
+            <Clock size={14} />
+          )}
+          {saveStatus === "saving"
+            ? "Wird gespeichert …"
+            : saveStatus === "pending"
+              ? "Änderungen ausstehend"
+              : saveStatus === "error"
+                ? "Nicht gespeichert"
+                : "Alle Änderungen gespeichert"}
+          {saveStatus === "error" && !conflict && (
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => {
+                setError("");
+                autosave.retry();
+              }}
+            >
+              Erneut versuchen
+            </button>
+          )}
+        </div>
+      )}
       <FormError error={error} />
       {conflict && (
         <button type="button" className="text-button" onClick={reload}>
@@ -2408,7 +2495,8 @@ function CardModal({
               Titel
               <input
                 value={data.title}
-                onChange={(e) => field("title", e.target.value)}
+                onChange={(e) => field("title", e.target.value, true)}
+                onBlur={() => autosave?.finish("title")}
                 required
                 maxLength={200}
                 placeholder="Was soll erledigt werden?"
@@ -2418,8 +2506,10 @@ function CardModal({
             <label>
               Beschreibung
               <textarea
+                aria-label="Beschreibung"
                 value={data.description}
-                onChange={(e) => field("description", e.target.value)}
+                onChange={(e) => field("description", e.target.value, true)}
+                onBlur={() => autosave?.finish("description")}
                 rows={4}
                 maxLength={20000}
                 placeholder="Hintergrund, Ziele und alles, was dein Team wissen sollte …"
@@ -2485,7 +2575,8 @@ function CardModal({
               <span className="label-hint">mit Komma trennen, maximal 8</span>
               <input
                 value={data.labels}
-                onChange={(e) => field("labels", e.target.value)}
+                onChange={(e) => field("labels", e.target.value, true)}
+                onBlur={() => autosave?.finish("labels")}
                 placeholder="z. B. Design, Entwicklung"
                 maxLength={248}
               />
@@ -2546,6 +2637,7 @@ function CardModal({
                   />
                   <input
                     aria-label="Checklistenpunkt"
+                    onBlur={() => autosave?.finish("checklist")}
                     value={item.text}
                     maxLength={300}
                     required
@@ -2555,6 +2647,7 @@ function CardModal({
                         data.checklist.map((i) =>
                           i.id === item.id ? { ...i, text: e.target.value } : i,
                         ),
+                        true,
                       )
                     }
                   />
@@ -2614,22 +2707,17 @@ function CardModal({
                 Löschen
               </button>
             )}
-            <button
-              type="button"
-              className="button secondary"
-              onClick={onClose}
-            >
-              {canEdit ? "Abbrechen" : "Schließen"}
+            <button type="button" className="button secondary" onClick={close}>
+              {card || !canEdit ? "Schließen" : "Abbrechen"}
             </button>
-            {canEdit && (
+            {canEdit && !card && (
               <button className="button primary" disabled={busy || uploading}>
-                {busy ? (
-                  <Spinner />
-                ) : card ? (
-                  "Änderungen speichern"
-                ) : (
-                  "Aufgabe erstellen"
-                )}
+                {busy ? <Spinner /> : "Aufgabe erstellen"}
+              </button>
+            )}
+            {card && saveStatus === "error" && (
+              <button type="button" className="text-button" onClick={onClose}>
+                Ungespeicherte Änderungen verwerfen
               </button>
             )}
           </div>

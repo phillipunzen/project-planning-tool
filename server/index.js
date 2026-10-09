@@ -901,12 +901,25 @@ const cardInput = z.object({
       }),
     )
     .max(50)
-    .default([])
     .refine(
       (items) => new Set(items.map((i) => i.id)).size === items.length,
       "Checklisten-IDs müssen eindeutig sein.",
-    ),
+    )
+    .default([]),
 });
+const cardPatchInput = z
+  .object(
+    Object.fromEntries(
+      Object.entries(cardInput.shape).map(([key, schema]) => [
+        key,
+        (schema instanceof z.ZodDefault
+          ? schema.removeDefault()
+          : schema
+        ).optional(),
+      ]),
+    ),
+  )
+  .extend({ version: z.number().int().nonnegative() });
 async function validateCardFields(b, input, t) {
   if (!b.columns.some((c) => c.id === input.columnId))
     throw Object.assign(new Error("Ungültige Spalte."), { status: 400 });
@@ -952,13 +965,8 @@ app.post(
 app.patch(
   "/api/cards/:id",
   api(async (req, res) => {
-    const input = cardInput
-      .extend({
-        version: z.number().int().nonnegative(),
-        progress: cardProgress.optional(),
-      })
-      .parse(req.body);
-    await db.transaction(async (t) => {
+    const input = cardPatchInput.parse(req.body);
+    const updated = await db.transaction(async (t) => {
       const initial = await Card.findByPk(req.params.id, { transaction: t });
       if (!initial)
         throw Object.assign(new Error("Aufgabe nicht gefunden."), {
@@ -976,11 +984,12 @@ app.patch(
           ),
           { status: 409 },
         );
-      await validateCardFields(b, input, t);
+      const merged = { ...c.toJSON(), ...input };
+      await validateCardFields(b, merged, t);
       let position = c.position;
-      if (c.columnId !== input.columnId) {
+      if (c.columnId !== merged.columnId) {
         const max = await Card.max("position", {
-          where: { BoardId: b.id, columnId: input.columnId },
+          where: { BoardId: b.id, columnId: merged.columnId },
           transaction: t,
         });
         position = (Number.isFinite(max) ? max : -1) + 1;
@@ -1003,14 +1012,15 @@ app.patch(
       await log(
         req,
         b,
-        oldColumn === input.columnId
+        oldColumn === merged.columnId
           ? "Aufgabe aktualisiert"
-          : `Status geändert: ${b.columns.find((col) => col.id === input.columnId).name}`,
+          : `Status geändert: ${b.columns.find((col) => col.id === merged.columnId).name}`,
         c.title,
         t,
       );
+      return { version: c.version };
     });
-    res.json({ ok: true });
+    res.json({ ok: true, ...updated });
   }),
 );
 app.delete(
