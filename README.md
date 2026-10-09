@@ -6,7 +6,7 @@ Repository: [phillipunzen/project-planning-tool](https://github.com/phillipunzen
 
 ## Funktionen
 
-- Projekte mit mehreren Kanban-Boards und anpassbaren Statusspalten.
+- Projekte mit mehreren Kanban-Boards und frei anpassbaren Buckets (Statusspalten). Über „Buckets bearbeiten“ Überschriften und Farben ändern, Reihenfolge in beide Richtungen verschieben sowie Buckets hinzufügen oder leere Buckets entfernen (1–12 pro Board). Erledigt-Buckets sind frei markierbar und unabhängig von der Reihenfolge; bestehende Boards behalten ihre bisherige Erledigt-Spalte.
 - Aufgaben mit Beschreibung, Priorität (niedrig, mittel, hoch, dringend), Fälligkeit, Verantwortlichem und Labels.
 - Verschieben und Sortieren mit Maus, Touch-Griff oder Tastatur (Leertaste, Pfeile, Leertaste; Escape zum Abbrechen). Alternativ Status in den Aufgabendetails ändern.
 - Checklisten mit einzelnen Punkten und Fortschrittsanzeige.

@@ -468,12 +468,119 @@ try {
   console.log(
     "PASS: Prozentfortschritt gespeichert, geteilt und auf Desktop und Handy bearbeitet",
   );
+  // Bucket editing must work with touch and keep completion independent of order.
+  const doneSummary = await mobile
+    .getByText(/von 7 Aufgaben erledigt/)
+    .textContent();
+  await mobile
+    .getByRole("button", { name: "Buckets bearbeiten", exact: true })
+    .tap();
+  await expect(
+    mobile.getByRole("heading", { name: "Board & Buckets", exact: true }),
+  ).toBeVisible();
+  await mobile
+    .getByRole("button", { name: "Bucket hinzufügen", exact: true })
+    .tap();
+  await mobile.getByLabel("Bucket 5", { exact: true }).fill("Kundenfreigabe");
+  await mobile
+    .getByLabel("Farbe für Kundenfreigabe", { exact: true })
+    .fill("#abcdef");
+  await expect(
+    mobile.getByLabel("Aufgaben in Kundenfreigabe gelten als erledigt"),
+  ).not.toBeChecked();
+  await expect(
+    mobile.getByRole("button", { name: "In Arbeit entfernen", exact: true }),
+  ).toBeDisabled();
+  await mobile
+    .getByRole("button", { name: "Erledigt nach oben", exact: true })
+    .tap();
+  await mobile
+    .getByRole("button", { name: "Erledigt nach oben", exact: true })
+    .tap();
+  await mobile
+    .getByRole("button", { name: "Erledigt nach oben", exact: true })
+    .tap();
+  await mobile
+    .getByRole("button", { name: "Kundenfreigabe nach oben", exact: true })
+    .tap();
+  await mobile
+    .getByRole("button", { name: "Kundenfreigabe nach unten", exact: true })
+    .tap();
+  await mobile.getByLabel("Bucket 2", { exact: true }).fill("Ideen & Planung");
+  const modalOverflow = await mobile
+    .locator("dialog")
+    .evaluate((el) => el.scrollWidth > el.clientWidth + 1);
+  if (modalOverflow) throw new Error("Bucket editor overflows on mobile");
+  await mobile.screenshot({
+    path: "artifacts/buckets-mobile.png",
+    fullPage: true,
+  });
+  await mobile.getByRole("button", { name: "Speichern", exact: true }).tap();
+  await expect(mobile.locator("dialog")).toHaveCount(0);
+  await expect(mobile.locator(".kanban-column")).toHaveCount(5);
+  await expect(
+    mobile
+      .locator(".kanban-column")
+      .first()
+      .getByRole("heading", { name: "Erledigt", exact: true }),
+  ).toBeVisible();
+  await expect(mobile.getByText(doneSummary, { exact: true })).toBeVisible();
+  await expect(mobile.locator(".task-card")).toHaveCount(7);
+  await mobile.reload();
+  await expect(mobile.locator(".kanban-column")).toHaveCount(5);
+  await mobile
+    .getByRole("button", { name: "Buckets bearbeiten", exact: true })
+    .tap();
+  await expect(mobile.getByLabel("Bucket 2", { exact: true })).toHaveValue(
+    "Ideen & Planung",
+  );
+  await expect(
+    mobile.getByLabel("Farbe für Kundenfreigabe", { exact: true }),
+  ).toHaveValue("#abcdef");
+  await expect(
+    mobile.getByLabel("Aufgaben in Erledigt gelten als erledigt"),
+  ).toBeChecked();
+  await mobile
+    .getByRole("button", { name: "Kundenfreigabe entfernen", exact: true })
+    .tap();
+  await mobile.getByRole("button", { name: "Speichern", exact: true }).tap();
+  await expect(mobile.locator("dialog")).toHaveCount(0);
+  await expect(mobile.locator(".kanban-column")).toHaveCount(4);
+  console.log(
+    "PASS: Frei benannte Buckets, Farben, Reihenfolge, Erledigt-Zuordnung und Entfernen auf dem Handy",
+  );
   await mobile.setViewportSize({ width: 768, height: 1024 });
   await mobile.screenshot({
     path: "artifacts/board-tablet.png",
     fullPage: true,
   });
   await mobileContext.close();
+  await page.reload();
+  await page.getByRole("button", { name: "Buckets bearbeiten", exact: true }).click();
+  await page.getByLabel("Bucket 2", { exact: true }).fill("Lokaler Entwurf");
+  const concurrentStatus = await page.evaluate(async () => {
+    const projects = await fetch("/api/projects").then(r => r.json());
+    const id = projects.find(p => p.name === "Unser erstes Projekt").Boards[0].id;
+    const board = await fetch(`/api/boards/${id}`).then(r => r.json());
+    const response = await fetch(`/api/boards/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ revision: board.revision, name: "Teamboard" }),
+    });
+    return response.status;
+  });
+  if (concurrentStatus !== 200) throw new Error("Concurrent bucket edit failed");
+  await page.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(page.getByText(/Das Board wurde inzwischen geändert/)).toBeVisible();
+  await expect(page.getByLabel("Bucket 2", { exact: true })).toHaveValue("Lokaler Entwurf");
+  await expect(page.getByRole("button", { name: "Speichern", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Aktuellen Stand laden", exact: true }).click();
+  await expect(page.getByLabel("Bucket 2", { exact: true })).toHaveValue("Ideen & Planung");
+  await expect(page.getByLabel("Boardname", { exact: true })).toHaveValue("Teamboard");
+  await page.getByLabel("Aufgaben in Erledigt gelten als erledigt").uncheck();
+  await page.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(page.locator("dialog")).toHaveCount(0);
+  await expect(page.getByText("0 von 7 Aufgaben erledigt", { exact: true })).toBeVisible();
+  console.log("PASS: Bucket-Konflikte behalten den Entwurf und erlauben bewusstes Neuladen");
   if (errors.length)
     throw new Error(`Browser runtime errors: ${errors.join("; ")}`);
   console.log("PASS: Desktop, Handy und Tablet ohne Browser-Laufzeitfehler");

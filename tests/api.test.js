@@ -6,7 +6,7 @@ process.env.ALLOWED_ORIGINS = "http://localhost:54734";
 process.env.DATABASE_NAME = "projektwerk_test";
 process.env.UPLOAD_DIR = "artifacts/test-uploads";
 const { app } = await import("../server/index.js");
-const { db, Setting, Invitation, Card, initializeDatabase } =
+const { db, Setting, Invitation, Card, Board, initializeDatabase } =
   await import("../server/db.js");
 await db.sync({ force: true });
 await Setting.create({ key: "installation", value: "{}" });
@@ -527,6 +527,107 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
         ).status,
         400,
       );
+    },
+  );
+  await t.test(
+    "buckets preserve cards and completion when renamed, reordered, added or removed",
+    async () => {
+      board = (await editor.call(`/boards/${board.id}`)).data;
+      const original = board.columns;
+      const existingCards = board.cards.map(({ id, columnId }) => ({
+        id,
+        columnId,
+      }));
+      // Simulate an existing installation whose JSON predates the explicit flag.
+      await Board.update(
+        { columns: original.map(({ isDone, ...c }) => c) },
+        { where: { id: board.id } },
+      );
+      const extra = {
+        id: crypto.randomUUID(),
+        name: "Wartet auf Kunden",
+        color: "#abcdef",
+      };
+      const customized = [...original].reverse().map(({ isDone, ...c }) => ({
+        ...c,
+        name: c.id === card.columnId ? "Technik" : c.name,
+      }));
+      const patch = {
+        revision: board.revision,
+        columns: [...customized, extra],
+      };
+      assert.equal(
+        (await viewer.call(`/boards/${board.id}`, "PATCH", patch)).status,
+        403,
+      );
+      assert.equal(
+        (await editor.call(`/boards/${board.id}`, "PATCH", patch)).status,
+        200,
+      );
+      assert.equal(
+        (await admin.call(`/boards/${board.id}`, "PATCH", patch)).status,
+        409,
+      );
+      board = (await viewer.call(`/boards/${board.id}`)).data;
+      assert.equal(board.columns[0].id, original.at(-1).id);
+      assert.equal(board.columns[0].isDone, true);
+      assert.equal(board.columns.at(-1).isDone, false);
+      assert.equal(board.columns.at(-1).color, "#abcdef");
+      assert.equal(
+        board.columns.find((c) => c.id === card.columnId).name,
+        "Technik",
+      );
+      assert.deepEqual(
+        board.cards.map(({ id, columnId }) => ({ id, columnId })),
+        existingCards,
+      );
+      for (const columns of [
+        [],
+        Array.from({ length: 13 }, () => ({
+          ...extra,
+          id: crypto.randomUUID(),
+        })),
+      ]) {
+        assert.equal(
+          (
+            await editor.call(`/boards/${board.id}`, "PATCH", {
+              revision: board.revision,
+              columns,
+            })
+          ).status,
+          400,
+        );
+      }
+      const revised = board.columns.map((c) => ({
+        ...c,
+        isDone: c.id === extra.id,
+      }));
+      assert.equal(
+        (
+          await editor.call(`/boards/${board.id}`, "PATCH", {
+            revision: board.revision,
+            columns: revised,
+          })
+        ).status,
+        200,
+      );
+      board = (await viewer.call(`/boards/${board.id}`)).data;
+      assert.deepEqual(
+        board.columns.filter((c) => c.isDone).map((c) => c.id),
+        [extra.id],
+      );
+      // Restore the original buckets and remove the new empty one.
+      assert.equal(
+        (
+          await editor.call(`/boards/${board.id}`, "PATCH", {
+            revision: board.revision,
+            columns: original,
+          })
+        ).status,
+        200,
+      );
+      board = (await editor.call(`/boards/${board.id}`)).data;
+      assert.deepEqual(board.columns, original);
     },
   );
   await t.test("comments are shared and recorded in activity", async () => {

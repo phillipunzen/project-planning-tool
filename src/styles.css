@@ -1810,11 +1810,32 @@ fieldset:disabled {
   white-space: nowrap;
   border: 0;
 }
-.columns-editor > div {
+.bucket-note {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 14px;
+  line-height: 1.6;
+}
+.bucket-editor-row {
+  border: 1px solid #eeeef4;
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+.bucket-editor-heading,
+.bucket-editor-controls {
   display: flex;
   align-items: center;
   gap: 9px;
-  margin-bottom: 10px;
+}
+.bucket-editor-controls {
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.bucket-editor-controls .checkbox-label {
+  flex: 1;
+  margin: 0;
+  font-size: 12px;
 }
 .columns-editor input[type="color"] {
   border: 0;
@@ -1825,12 +1846,11 @@ fieldset:disabled {
   flex-shrink: 0;
   cursor: pointer;
 }
-.columns-editor input:not([type="color"]) {
+.columns-editor input[type="text"] {
   font-size: 12px;
   padding: 9px 10px;
-}
-.rotate-up {
-  transform: rotate(90deg);
+  min-width: 0;
+  flex: 1;
 }
 .invite-form-bottom {
   display: flex;

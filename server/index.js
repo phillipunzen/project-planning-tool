@@ -131,10 +131,10 @@ const color = z.string().regex(/^#[0-9a-f]{6}$/i);
 const uuid = z.uuid();
 const inviteToken = z.string().regex(/^[a-f0-9]{64}$/);
 const columns = () => [
-  { id: randomUUID(), name: "Offen", color: "#94a3b8" },
-  { id: randomUUID(), name: "In Arbeit", color: "#6366f1" },
-  { id: randomUUID(), name: "Review", color: "#f59e0b" },
-  { id: randomUUID(), name: "Erledigt", color: "#10b981" },
+  { id: randomUUID(), name: "Offen", color: "#94a3b8", isDone: false },
+  { id: randomUUID(), name: "In Arbeit", color: "#6366f1", isDone: false },
+  { id: randomUUID(), name: "Review", color: "#f59e0b", isDone: false },
+  { id: randomUUID(), name: "Erledigt", color: "#10b981", isDone: true },
 ];
 async function log(req, b, action, cardTitle, t) {
   await Activity.create(
@@ -842,7 +842,9 @@ app.patch(
         name: name.optional(),
         revision: z.number().int(),
         columns: z
-          .array(z.object({ id: uuid, name, color }))
+          .array(
+            z.object({ id: uuid, name, color, isDone: z.boolean().optional() }),
+          )
           .min(1)
           .max(12)
           .optional(),
@@ -858,6 +860,16 @@ app.patch(
     await db.transaction(async (t) => {
       const b = await lockedBoard(req, req.params.id, t, input.revision);
       if (input.columns) {
+        const previous = new Map(
+          b.columns.map((c, index) => [
+            c.id,
+            c.isDone ?? index === b.columns.length - 1,
+          ]),
+        );
+        input.columns = input.columns.map((c) => ({
+          ...c,
+          isDone: c.isDone ?? previous.get(c.id) ?? false,
+        }));
         const occupied = await Card.findAll({
           where: { BoardId: b.id },
           attributes: ["columnId"],

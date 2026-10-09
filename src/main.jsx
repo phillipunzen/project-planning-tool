@@ -27,6 +27,8 @@ import {
   ChevronRight,
   ArrowRight,
   ArrowUpRight,
+  ArrowUp,
+  ArrowDown,
   LayoutGrid,
   List,
   Clock,
@@ -94,6 +96,13 @@ async function api(url, options = {}) {
     );
   return data;
 }
+const bucketIsDone = (columns, column) =>
+  column.isDone ?? column.id === columns.at(-1)?.id;
+const cardIsDone = (board, card) =>
+  board.columns.some(
+    (column) =>
+      column.id === card.columnId && bucketIsDone(board.columns, column),
+  );
 const icons = {
   layers: Layers,
   code: Code2,
@@ -717,7 +726,7 @@ function App() {
                   <span>
                     <CheckCircle2 size={14} />
                     {board
-                      ? `${board.cards.filter((c) => c.columnId === board.columns.at(-1)?.id).length} von ${board.cards.length} Aufgaben erledigt`
+                      ? `${board.cards.filter((c) => cardIsDone(board, c)).length} von ${board.cards.length} Aufgaben erledigt`
                       : "Board wird geladen"}
                   </span>
                 </div>
@@ -817,12 +826,12 @@ function App() {
                   <div className="toolbar-right">
                     {board && canEdit && (
                       <button
-                        className="icon-button"
-                        aria-label="Spalten bearbeiten"
-                        title="Spalten bearbeiten"
+                        className="button secondary"
+                        aria-label="Buckets bearbeiten"
                         onClick={() => setModal({ type: "columns" })}
                       >
                         <Settings size={17} />
+                        Buckets bearbeiten
                       </button>
                     )}
                     {canEdit && (
@@ -942,7 +951,7 @@ function App() {
           onSaved={async () => {
             await refreshBoard();
             setModal(null);
-            notify("Spalten gespeichert");
+            notify("Buckets gespeichert");
           }}
         />
       )}
@@ -1806,9 +1815,7 @@ function MyTasks({ projects, user, onSelect }) {
             project: p,
             board,
             cards: board.cards.filter(
-              (c) =>
-                c.assigneeId === user.id &&
-                c.columnId !== board.columns.at(-1)?.id,
+              (c) => c.assigneeId === user.id && !cardIsDone(board, c),
             ),
           };
         }),
@@ -2078,28 +2085,71 @@ function BoardModal({ project, onClose, onSaved }) {
   );
 }
 function ColumnsModal({ board, onClose, onSaved }) {
-  const [cols, setCols] = useState(board.columns.map((c) => ({ ...c }))),
+  const [currentBoard, setCurrentBoard] = useState(board);
+  const revision = useRef(board.revision);
+  const initialColumns = (columns) =>
+    columns.map((c) => ({
+      ...c,
+      isDone: bucketIsDone(columns, c),
+    }));
+  const [cols, setCols] = useState(() => initialColumns(board.columns)),
     [boardName, setBoardName] = useState(board.name),
     [error, setError] = useState(""),
+    [conflict, setConflict] = useState(false),
     [busy, setBusy] = useState(false);
+  function changeColumn(id, fields) {
+    setCols((current) =>
+      current.map((c) => (c.id === id ? { ...c, ...fields } : c)),
+    );
+  }
+  function moveColumn(index, offset) {
+    setCols((current) => {
+      const next = [...current];
+      [next[index], next[index + offset]] = [next[index + offset], next[index]];
+      return next;
+    });
+  }
+  async function reload() {
+    setBusy(true);
+    try {
+      const latest = await api(`/boards/${board.id}`);
+      revision.current = latest.revision;
+      setCurrentBoard(latest);
+      setCols(initialColumns(latest.columns));
+      setBoardName(latest.name);
+      setError("");
+      setConflict(false);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
+    setError("");
     try {
       await api(`/boards/${board.id}`, {
         method: "PATCH",
-        body: { name: boardName, columns: cols, revision: board.revision },
+        body: { name: boardName, columns: cols, revision: revision.current },
       });
       await onSaved();
     } catch (e) {
-      setError(e.message);
+      setConflict(e.status === 409);
+      setError(
+        e.status === 409
+          ? "Das Board wurde inzwischen geändert. Lade den aktuellen Stand; deine Bucket-Entwürfe werden dabei verworfen."
+          : e.message,
+      );
+    } finally {
       setBusy(false);
     }
   }
   return (
     <Modal
-      title="Board & Spalten"
-      subtitle="Die letzte Spalte gilt in der Übersicht als erledigt."
+      title="Board & Buckets"
+      subtitle="Eigene Überschriften, Farben und Reihenfolge für euer Team."
       onClose={onClose}
     >
       <form onSubmit={submit}>
@@ -2110,93 +2160,133 @@ function ColumnsModal({ board, onClose, onSaved }) {
             onChange={(e) => setBoardName(e.target.value)}
             required
             maxLength={100}
+            disabled={busy}
           />
         </label>
-        <label>Statusspalten</label>
+        <label>Buckets</label>
+        <p className="bucket-note">
+          1–12 Buckets. Markiere die Buckets, deren Aufgaben als erledigt
+          gelten. Zum Entfernen eines Buckets zuerst seine Aufgaben verschieben.
+        </p>
         <div className="columns-editor">
-          {cols.map((c, index) => (
-            <div key={c.id}>
-              <input
-                type="color"
-                aria-label={`Farbe für ${c.name}`}
-                value={c.color}
-                onChange={(e) =>
-                  setCols(
-                    cols.map((col) =>
-                      col.id === c.id ? { ...col, color: e.target.value } : col,
-                    ),
-                  )
-                }
-              />
-              <input
-                aria-label={`Spalte ${index + 1}`}
-                value={c.name}
-                required
-                maxLength={100}
-                onChange={(e) =>
-                  setCols(
-                    cols.map((col) =>
-                      col.id === c.id ? { ...col, name: e.target.value } : col,
-                    ),
-                  )
-                }
-              />
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="Spalte nach oben"
-                disabled={index === 0}
-                onClick={() => {
-                  const next = [...cols];
-                  [next[index - 1], next[index]] = [
-                    next[index],
-                    next[index - 1],
-                  ];
-                  setCols(next);
-                }}
-              >
-                <ArrowLeft className="rotate-up" size={15} />
-              </button>
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="Spalte entfernen"
-                disabled={
-                  cols.length === 1 ||
-                  board.cards.some((card) => card.columnId === c.id)
-                }
-                title="Nur leere Spalten können entfernt werden"
-                onClick={() => setCols(cols.filter((col) => col.id !== c.id))}
-              >
-                <Trash2 size={15} />
-              </button>
-            </div>
-          ))}
+          {cols.map((c, index) => {
+            const occupied = currentBoard.cards.some(
+              (card) => card.columnId === c.id,
+            );
+            return (
+              <div className="bucket-editor-row" key={c.id}>
+                <div className="bucket-editor-heading">
+                  <input
+                    type="color"
+                    aria-label={`Farbe für ${c.name}`}
+                    value={c.color}
+                    disabled={busy}
+                    onChange={(e) =>
+                      changeColumn(c.id, { color: e.target.value })
+                    }
+                  />
+                  <input
+                    type="text"
+                    aria-label={`Bucket ${index + 1}`}
+                    value={c.name}
+                    required
+                    maxLength={100}
+                    disabled={busy}
+                    onChange={(e) =>
+                      changeColumn(c.id, { name: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="bucket-editor-controls">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={c.isDone}
+                      disabled={busy}
+                      aria-label={`Aufgaben in ${c.name} gelten als erledigt`}
+                      onChange={(e) =>
+                        changeColumn(c.id, { isDone: e.target.checked })
+                      }
+                    />
+                    Erledigt-Bucket
+                  </label>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`${c.name} nach oben`}
+                    disabled={busy || index === 0}
+                    onClick={() => moveColumn(index, -1)}
+                  >
+                    <ArrowUp size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`${c.name} nach unten`}
+                    disabled={busy || index === cols.length - 1}
+                    onClick={() => moveColumn(index, 1)}
+                  >
+                    <ArrowDown size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`${c.name} entfernen`}
+                    disabled={busy || cols.length === 1 || occupied}
+                    title={
+                      occupied
+                        ? "Zuerst die Aufgaben in einen anderen Bucket verschieben"
+                        : cols.length === 1
+                          ? "Mindestens ein Bucket muss bleiben"
+                          : "Bucket entfernen"
+                    }
+                    onClick={() =>
+                      setCols((current) =>
+                        current.filter((col) => col.id !== c.id),
+                      )
+                    }
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
         <button
           type="button"
           className="text-button"
-          disabled={cols.length >= 12}
+          disabled={busy || cols.length >= 12}
           onClick={() =>
-            setCols([
-              ...cols,
+            setCols((current) => [
+              ...current,
               {
                 id: crypto.randomUUID(),
-                name: "Neue Spalte",
+                name: "Neuer Bucket",
                 color: "#94a3b8",
+                isDone: false,
               },
             ])
           }
         >
-          <Plus size={16} />
-          Spalte hinzufügen
+          <Plus size={16} /> Bucket hinzufügen
         </button>
         <FormError error={error} />
+        {conflict && (
+          <button
+            type="button"
+            className="button secondary"
+            disabled={busy}
+            onClick={reload}
+          >
+            Aktuellen Stand laden
+          </button>
+        )}
         <div className="modal-actions">
           <button type="button" className="button secondary" onClick={onClose}>
             Abbrechen
           </button>
-          <button className="button primary" disabled={busy}>
+          <button className="button primary" disabled={busy || conflict}>
             {busy ? <Spinner /> : "Speichern"}
           </button>
         </div>
