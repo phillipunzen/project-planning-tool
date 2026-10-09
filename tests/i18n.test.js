@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { projectIcons } from "../shared/project-icons.js";
 import { detectLanguage, translateMessage } from "../shared/language.js";
 const en = JSON.parse(fs.readFileSync(new URL("../shared/en.json", import.meta.url), "utf8"));
 
@@ -30,6 +31,9 @@ test("every static interface message has an English translation with matching pl
       if (!key || ["projekt", "werk"].includes(key)) continue;
       assert(Object.hasOwn(en, key), `Missing translation: ${key}`);
     }
+  }
+  for (const label of Object.values(projectIcons)) {
+    assert(Object.hasOwn(en, label), `Missing project icon translation: ${label}`);
   }
   for (const [key, value] of Object.entries(en)) {
     assert.deepEqual([...key.matchAll(/\{\d+\}/g)].map(m => m[0]).sort(), [...value.matchAll(/\{\d+\}/g)].map(m => m[0]).sort(), key);

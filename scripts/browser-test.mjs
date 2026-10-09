@@ -715,6 +715,154 @@ try {
   await expect(english.locator("html")).toHaveAttribute("lang", "en");
   await englishContext.close();
   console.log("PASS: Deutsche/englische Browsersprache, übersetzte Karten/Buckets/Admin/Verlauf und gespeicherte Profilsprache über Geräte hinweg");
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Projekteinstellungen", exact: true })
+    .click();
+  const iconPicker = page.getByRole("group", {
+    name: "Projektsymbol",
+    exact: true,
+  });
+  await expect(iconPicker.getByRole("button")).toHaveCount(16);
+  await expect(
+    iconPicker.getByRole("button", { name: "Symbol Allgemein", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await iconPicker
+    .getByRole("button", { name: "Symbol Terminplanung", exact: true })
+    .click();
+  await expect(
+    iconPicker.getByRole("button", { name: "Symbol Terminplanung", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(page.locator(".project-heading .project-icon")).toHaveAttribute(
+    "data-icon",
+    "calendar",
+  );
+  const originalProjectNav = page
+    .locator(".project-nav")
+    .getByRole("button", { name: "Unser erstes Projekt", exact: true });
+  await expect(originalProjectNav.locator(".project-icon")).toHaveAttribute(
+    "data-icon",
+    "calendar",
+  );
+  await page.reload();
+  await expect(page.locator(".project-heading .project-icon")).toHaveAttribute(
+    "data-icon",
+    "calendar",
+  );
+  await page
+    .getByRole("button", { name: "Projektübersicht", exact: true })
+    .click();
+  const originalProjectTile = page
+    .locator(".project-tile")
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Unser erstes Projekt",
+        exact: true,
+      }),
+    });
+  await expect(originalProjectTile.locator(".project-icon")).toHaveAttribute(
+    "data-icon",
+    "calendar",
+  );
+  await page
+    .locator(".sidebar")
+    .getByRole("button", { name: "Neues Projekt", exact: true })
+    .click();
+  await page
+    .getByLabel("Projektname", { exact: true })
+    .fill("Website – Kundenportal");
+  await page
+    .getByRole("group", { name: "Projektsymbol", exact: true })
+    .getByRole("button", { name: "Symbol Website", exact: true })
+    .click();
+  await page
+    .locator("dialog")
+    .getByRole("button", { name: "Projekt erstellen", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Website – Kundenportal", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".project-heading .project-icon")).toHaveAttribute(
+    "data-icon",
+    "globe",
+  );
+  await expect(
+    page
+      .locator(".project-nav")
+      .getByRole("button", { name: "Website – Kundenportal", exact: true })
+      .locator(".project-icon"),
+  ).toHaveAttribute("data-icon", "globe");
+  await page
+    .getByRole("button", { name: "Projektübersicht", exact: true })
+    .click();
+  await page.screenshot({
+    path: "artifacts/project-icons-desktop.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  const iconMobileContext = await browser.newContext({
+    locale: "en-US",
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    colorScheme: "dark",
+    storageState: await page.context().storageState(),
+  });
+  const iconMobile = await iconMobileContext.newPage();
+  iconMobile.on("pageerror", (e) => errors.push(e.message));
+  await iconMobile.goto(base);
+  await expect(
+    iconMobile.locator(".project-heading .project-icon"),
+  ).toHaveAttribute("data-icon", "calendar");
+  await iconMobile
+    .getByRole("button", { name: "Project settings", exact: true })
+    .click();
+  const mobilePicker = iconMobile.getByRole("group", {
+    name: "Project icon",
+    exact: true,
+  });
+  await expect(
+    mobilePicker.getByRole("button", { name: "Icon Scheduling", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await mobilePicker
+    .getByRole("button", { name: "Icon Ideas", exact: true })
+    .tap();
+  await expect(
+    mobilePicker.getByRole("button", { name: "Icon Ideas", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  if (
+    await iconMobile.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    )
+  )
+    throw new Error("Mobile project icon picker overflow");
+  await iconMobile.screenshot({
+    path: "artifacts/project-icons-mobile-dark.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  await iconMobile.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(
+    iconMobile.locator(".project-heading .project-icon"),
+  ).toHaveAttribute("data-icon", "lightbulb");
+  await iconMobile.reload();
+  await expect(
+    iconMobile.locator(".project-heading .project-icon"),
+  ).toHaveAttribute("data-icon", "lightbulb");
+  await iconMobile
+    .getByRole("button", { name: "Open menu", exact: true })
+    .click();
+  await expect(
+    iconMobile
+      .locator(".project-nav")
+      .getByRole("button", { name: "Unser erstes Projekt", exact: true })
+      .locator(".project-icon"),
+  ).toHaveAttribute("data-icon", "lightbulb");
+  await iconMobileContext.close();
+  console.log(
+    "PASS: Projekticons beim Anlegen und Bearbeiten, in Navigation/Übersicht/Projektkopf und auf englischem Handy mit Touch und Dark Mode",
+  );
   // Branding applies to signed-in users and the public login screen, across reloads/devices.
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "de");

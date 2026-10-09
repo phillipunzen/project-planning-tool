@@ -484,6 +484,77 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
       );
     },
   );
+  await t.test(
+    "project icons persist on creation and owner edits, retain omitted fields and reject unauthorized or invalid updates",
+    async () => {
+      assert.equal(project.icon, "code");
+      const created = await admin.call("/projects", "POST", {
+        name: "Website Icon",
+        icon: "globe",
+      });
+      assert.equal(created.status, 201);
+      assert.equal(created.data.icon, "globe");
+      const before = (await admin.call("/projects")).data.find(
+        (p) => p.id === project.id,
+      );
+      for (const user of [editor, viewer, outsider]) {
+        assert.equal(
+          (
+            await user.call(`/projects/${project.id}`, "PATCH", {
+              icon: "shield",
+            })
+          ).status,
+          403,
+        );
+      }
+      assert.equal(
+        (
+          await admin.call(`/projects/${project.id}`, "PATCH", {
+            icon: "calendar",
+          })
+        ).status,
+        200,
+      );
+      let saved = (await viewer.call("/projects")).data.find(
+        (p) => p.id === project.id,
+      );
+      assert.equal(saved.icon, "calendar");
+      assert.equal(saved.name, before.name);
+      assert.equal(saved.description, before.description);
+      assert.equal(saved.color, before.color);
+      assert.deepEqual(
+        saved.Boards.map((b) => b.id).sort(),
+        before.Boards.map((b) => b.id).sort(),
+      );
+      assert.equal(
+        (
+          await admin.call(`/projects/${project.id}`, "PATCH", {
+            description: before.description,
+          })
+        ).status,
+        200,
+      );
+      for (const icon of ["unknown", "<svg onload=alert(1)>", null, 5]) {
+        assert.equal(
+          (await admin.call("/projects", "POST", { name: "Invalid Icon", icon }))
+            .status,
+          400,
+        );
+        assert.equal(
+          (await admin.call(`/projects/${project.id}`, "PATCH", { icon })).status,
+          400,
+        );
+      }
+      saved = (await editor.call("/projects")).data.find(
+        (p) => p.id === project.id,
+      );
+      assert.equal(saved.icon, "calendar");
+      assert.equal(
+        (await admin.call(`/projects/${created.data.id}`, "DELETE")).status,
+        200,
+      );
+    },
+  );
   await t.test("simultaneous moves cannot overwrite each other", async () => {
     const body = {
       cardId: card.id,

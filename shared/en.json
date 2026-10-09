@@ -423,5 +423,19 @@
   "PNG, JPG oder WebP · maximal 2 MB und 4096 × 4096 Pixel. Das Logo wird auch als Browser-Symbol verwendet.": "PNG, JPG or WebP · up to 2 MB and 4096 × 4096 pixels. The logo is also used as the browser icon.",
   "Logo entfernen": "Remove logo",
   "Bitte ein gültiges PNG-, JPG- oder WebP-Logo mit maximal 4096 × 4096 Pixeln wählen.": "Please choose a valid PNG, JPG or WebP logo no larger than 4096 × 4096 pixels.",
-  "Logo hochladen oder entfernen, nicht beides gleichzeitig.": "Choose either uploading or removing a logo, not both at once."
+  "Logo hochladen oder entfernen, nicht beides gleichzeitig.": "Choose either uploading or removing a logo, not both at once.",
+  "Entwicklung": "Development",
+  "Projektstart": "Launch",
+  "Design": "Design",
+  "Business": "Business",
+  "Ordner": "Folder",
+  "Terminplanung": "Scheduling",
+  "Meilenstein": "Milestone",
+  "Sicherheit": "Security",
+  "Cloud": "Cloud",
+  "Analyse": "Analytics",
+  "Technik": "Engineering",
+  "Website": "Website",
+  "Dokumentation": "Documentation",
+  "Ideen": "Ideas"
 }

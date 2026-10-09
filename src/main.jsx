@@ -68,6 +68,11 @@ import {
   RefreshCw,
   PanelLeftClose,
   Inbox,
+  ChartNoAxesCombined,
+  Wrench,
+  Globe,
+  BookOpen,
+  Lightbulb,
 } from "lucide-react";
 import "./styles.css";
 import { ThemeProvider, ThemeControl } from "./theme.jsx";
@@ -79,6 +84,7 @@ import {
   setLanguagePreference,
 } from "./i18n.js";
 import { useBranding, setBranding } from "./branding.js";
+import { projectIcons } from "../shared/project-icons.js";
 import { CardAutosave } from "./card-autosave.js";
 async function api(url, options = {}) {
   const response = await fetch(`/api${url}`, {
@@ -119,6 +125,17 @@ const icons = {
   rocket: Rocket,
   palette: Palette,
   briefcase: Briefcase,
+  folder: FolderOpen,
+  users: Users,
+  calendar: CalendarDays,
+  flag: Flag,
+  shield: Shield,
+  cloud: CloudUpload,
+  chart: ChartNoAxesCombined,
+  wrench: Wrench,
+  globe: Globe,
+  book: BookOpen,
+  lightbulb: Lightbulb,
 };
 const priorities = {
   urgent: { label: "Dringend", color: "red" },
@@ -181,6 +198,9 @@ function ProjectIcon({ project }) {
   return (
     <span
       className="project-icon"
+      data-icon={projectIcons[project.icon] ? project.icon : "layers"}
+      title={t(projectIcons[project.icon] || projectIcons.layers)}
+      aria-hidden="true"
       style={{
         background: `${project.color}16`,
         "--project-color": project.color,
@@ -588,7 +608,7 @@ function App() {
                 }
                 onClick={() => selectProject(p.id)}
               >
-                <span className="project-dot" style={{ background: p.color }} />
+                <ProjectIcon project={p} />
                 <span>{p.name}</span>
                 {p.id === projectId && view === "board" && (
                   <ChevronRight size={14} />
@@ -2070,9 +2090,8 @@ function ProjectModal({ project, onClose, onSaved, onDeleted }) {
         name: f.get("name"),
         description: f.get("description"),
         color: selectedColor,
-        ...(!project
-          ? { icon: selectedIcon }
-          : { archived: f.get("archived") === "on" }),
+        icon: selectedIcon,
+        ...(project ? { archived: f.get("archived") === "on" } : {}),
       };
       const result = await api(
         project ? `/projects/${project.id}` : "/projects",
@@ -2144,24 +2163,27 @@ function ProjectModal({ project, onClose, onSaved, onDeleted }) {
             ))}
           </div>
         </label>
-        {!project && (
-          <label>
-            {t("Projektsymbol")}
-            <div className="icon-picker">
-              {Object.entries(icons).map(([key, Icon]) => (
+        <fieldset className="project-icon-field" disabled={busy}>
+          <legend>{t("Projektsymbol")}</legend>
+          <div className="icon-picker">
+            {Object.entries(projectIcons).map(([key, label]) => {
+              const Icon = icons[key];
+              return (
                 <button
                   type="button"
                   key={key}
                   className={key === selectedIcon ? "picked" : ""}
-                  aria-label={t("Symbol {0}", [key])}
+                  aria-label={t("Symbol {0}", [t(label)])}
+                  title={t(label)}
+                  aria-pressed={key === selectedIcon}
                   onClick={() => setIcon(key)}
                 >
                   <Icon size={20} />
                 </button>
-              ))}
-            </div>
-          </label>
-        )}
+              );
+            })}
+          </div>
+        </fieldset>
         {project && (
           <label className="checkbox-label">
             <input

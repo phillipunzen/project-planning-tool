@@ -4,6 +4,7 @@ import {
   translateForRequest,
   translateForLanguage,
 } from "./language.js";
+import { projectIcons } from "../shared/project-icons.js";
 import "dotenv/config";
 import express from "express";
 import helmet from "helmet";
@@ -606,7 +607,7 @@ app.post(
         description: z.string().max(5000).default(""),
         color: color.default("#6366f1"),
         icon: z
-          .enum(["layers", "code", "rocket", "palette", "briefcase"])
+          .enum(Object.keys(projectIcons))
           .default("layers"),
       })
       .parse(req.body);
@@ -625,6 +626,7 @@ app.patch(
         name: name.optional(),
         description: z.string().max(5000).optional(),
         color: color.optional(),
+        icon: z.enum(Object.keys(projectIcons)).optional(),
         archived: z.boolean().optional(),
       })
       .parse(req.body);

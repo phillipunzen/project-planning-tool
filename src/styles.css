@@ -371,11 +371,10 @@ fieldset:disabled {
   white-space: nowrap;
   flex: 1;
 }
-.project-dot {
-  height: 7px;
-  width: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
+.project-nav .project-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
 }
 .nav-empty {
   padding: 8px 14px;
@@ -1551,8 +1550,8 @@ fieldset:disabled {
   outline-offset: 2px;
 }
 .icon-picker button {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 8px;
   color: var(--text-muted, #a4a9bd);
   background: var(--surface-soft, #f5f6fa);
@@ -3251,4 +3250,16 @@ fieldset:disabled {
   .branding-preview > strong {
     font-size: 17px;
   }
+}
+
+.project-icon-field {
+  margin-bottom: 19px;
+}
+.project-icon-field legend {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-strong, #515668);
+}
+.icon-picker {
+  flex-wrap: wrap;
 }
