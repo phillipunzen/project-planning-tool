@@ -144,25 +144,27 @@ export async function resolveExternalUser(identity, inviteToken) {
         });
       return user;
     }
-    const invitation =
-      inviteToken &&
-      (await Invitation.findOne({
-        where: {
-          tokenHash: hashToken(inviteToken),
-          email: identity.email,
-          acceptedAt: null,
-          expiresAt: { [Op.gt]: new Date() },
-        },
-        transaction: t,
-        lock: t.LOCK.UPDATE,
-      }));
-    if (!invitation)
-      throw Object.assign(
-        new Error(
-          "Für die erste Anmeldung benötigst du einen gültigen Einladungslink für deine E-Mail-Adresse.",
-        ),
-        { status: 403 },
-      );
+    if (identity.authType !== "oidc") {
+      const invitation =
+        inviteToken &&
+        (await Invitation.findOne({
+          where: {
+            tokenHash: hashToken(inviteToken),
+            email: identity.email,
+            acceptedAt: null,
+            expiresAt: { [Op.gt]: new Date() },
+          },
+          transaction: t,
+          lock: t.LOCK.UPDATE,
+        }));
+      if (!invitation)
+        throw Object.assign(
+          new Error(
+            "Für die erste Anmeldung benötigst du einen gültigen Einladungslink für deine E-Mail-Adresse.",
+          ),
+          { status: 403 },
+        );
+    }
     if (
       await User.findOne({ where: { email: identity.email }, transaction: t })
     )
@@ -172,11 +174,22 @@ export async function resolveExternalUser(identity, inviteToken) {
         ),
         { status: 409 },
       );
-    user = await User.create(identity, { transaction: t });
+    user = await User.create({ ...identity, role: "user" }, { transaction: t });
     return user;
   });
 }
+export function checkLoginTransport(req) {
+  if (req.session.cookie.secure && !req.secure) {
+    throw Object.assign(
+      new Error(
+        "Die sichere Anmeldesitzung konnte nicht gesetzt werden. Bitte APP_URL und TRUST_PROXY sowie die HTTPS-Weiterleitung am Reverse Proxy prüfen.",
+      ),
+      { status: 503, code: "LOGIN_TRANSPORT" },
+    );
+  }
+}
 export async function loginSession(req, user) {
+  checkLoginTransport(req);
   await new Promise((resolve, reject) =>
     req.session.regenerate((e) => (e ? reject(e) : resolve())),
   );

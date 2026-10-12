@@ -330,7 +330,7 @@
   "Spalten müssen eindeutige IDs haben.": "Buckets must have unique IDs.",
   "Speichere deine Aufgabe. Danach kannst du Dokumente und Bilder anhängen.": "Save your task first. You can then attach documents and images.",
   "Speichern": "Save",
-  "Standardmäßig wird email_verified=true verlangt. Für Entra ID nur aktivieren, wenn dein Tenant die E-Mail-Adressen verlässlich verwaltet. Beim ersten externen Login ist ein passender Einladungslink erforderlich.": "By default, email_verified=true is required. For Entra ID, enable this only if your tenant reliably manages email addresses. First external sign-in requires a matching invitation link.",
+  "Standardmäßig wird email_verified=true verlangt. Für Entra ID nur aktivieren, wenn dein Tenant die E-Mail-Adressen verlässlich verwaltet. Neue OIDC-Benutzer werden bei der ersten Anmeldung automatisch registriert. Projekteinladungen werden nur für den Zugriff auf bestehende Projekte benötigt.": "By default, email_verified=true is required. For Entra ID, enable this only if your tenant reliably manages email addresses. New OIDC users are automatically registered on their first sign-in. Project invitations are only needed to access existing projects.",
   "Starke Teams.": "Strong teams.",
   "StartTLS verwenden (für ldap://)": "Use StartTLS (for ldap://)",
   "Status": "Status",
@@ -437,5 +437,7 @@
   "Technik": "Engineering",
   "Website": "Website",
   "Dokumentation": "Documentation",
-  "Ideen": "Ideas"
+  "Ideen": "Ideas",
+  "Die Anmeldesitzung konnte nicht bestätigt werden. Bitte erlaube Cookies für diese Website. Falls das Problem bleibt, wende dich an den Administrator.": "The sign-in session could not be confirmed. Please allow cookies for this website. If the problem persists, contact your administrator.",
+  "Die sichere Anmeldesitzung konnte nicht gesetzt werden. Bitte APP_URL und TRUST_PROXY sowie die HTTPS-Weiterleitung am Reverse Proxy prüfen.": "The secure sign-in session could not be set. Please check APP_URL and TRUST_PROXY and the HTTPS forwarding at the reverse proxy."
 }

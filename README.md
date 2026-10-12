@@ -128,6 +128,12 @@ Anschließend `docker compose up -d` ausführen. HTTPS kann über einen vorhande
 
 `APP_URL` ist die feste externe Origin: Anmeldung, Einladungen, Redirect-URI, sichere Cookies und Schreibzugriffe richten sich danach. Für zusätzliche Vorschauadressen kann `ALLOWED_ORIGINS` explizit gesetzt werden (siehe unten). Bei HTTPS muss der Proxy `X-Forwarded-Proto: https` liefern. MariaDB wird im normalen Compose-Betrieb nicht auf dem Host veröffentlicht.
 
+### Anmeldung ohne dauerhafte Sitzung
+
+Die Oberfläche bestätigt nach Einrichtung, Anmeldung und Einladungsannahme die Sitzung über `/api/me`. Fehlt das Sitzungscookie, bleibt eine sichtbare Fehlermeldung stehen. Nach einer bereits erfolgreichen Kontoerstellung kann die Anmeldung erneut versucht werden; das Konto muss nicht noch einmal erstellt werden.
+
+Bei HTTP-Zugriff muss `APP_URL` ebenfalls mit `http://` beginnen. Bei HTTPS hinter einem Reverse Proxy die tatsächliche HTTPS-Adresse als `APP_URL` und `TRUST_PROXY=1` für einen vorgeschalteten Proxy setzen; dieser muss `X-Forwarded-Proto: https` weitergeben. Eine HTTPS-Konfiguration ohne erkannte sichere Verbindung wird vor der Kontoerstellung oder Anmeldung mit einer verständlichen Fehlermeldung abgelehnt. Sichere Cookies werden dabei nicht abgeschaltet. Im Browser Cookies für die verwendete Website zulassen. Nach einer ENV-Änderung `docker compose up -d --wait app` ausführen.
+
 ### Weitergeleitete Vorschauadressen
 
 Wenn eine lokale Vorschau einen anderen Port verwendet, ihre genaue Origin zusätzlich in `.env` freigeben, zum Beispiel:
@@ -150,7 +156,7 @@ Der erste Benutzer ist Administrator. Weitere Konten entstehen über eine Einlad
 2. Die in **Administration → Anmeldung → OpenID Connect** angezeigte Redirect-URI registrieren: `APP_URL/api/auth/oidc/callback`.
 3. HTTPS-Issuer-URL, Client-ID, Client-Secret und optional Anzeigename eintragen.
 4. Verbindung prüfen und Konfiguration speichern.
-5. Einen Benutzer mit der vom Anbieter gelieferten E-Mail-Adresse zum Projekt einladen. Beim ersten Login den Einladungslink öffnen und die Firmenanmeldung wählen. Danach kann sich das Konto direkt per SSO anmelden.
+5. Die Firmenanmeldung wählen. Benutzer des konfigurierten OIDC-Anbieters werden bei ihrer ersten erfolgreichen Anmeldung automatisch angelegt; ein Einladungslink ist dafür nicht erforderlich. Neue Konten erhalten die Rolle **Benutzer**, können eigene Projekte erstellen und haben zunächst keinen Zugriff auf bestehende Projekte. Für die Zusammenarbeit in einem bestehenden Projekt wird weiterhin eine Projekteinladung benötigt.
 
 Für Entra ID die konkrete Tenant-Issuer-URL `https://login.microsoftonline.com/<TENANT-ID>/v2.0` verwenden. Einen tenantübergreifenden `common`-Issuer unterstützt diese Version nicht. Der Anbieter muss das `email`-Claim liefern; gegebenenfalls einen optionalen Claim in der App-Registrierung aktivieren.
 
@@ -172,7 +178,7 @@ Die Anmeldung prüft zuerst das Verzeichnis mit dem Servicekonto, anschließend 
 
 Serverzertifikate werden validiert. Für eine interne CA das PEM-Zertifikat lesbar in den Container mounten und `NODE_EXTRA_CA_CERTS=/app/certs/firma-ca.pem` als Umgebungsvariable ergänzen. Keine Abschaltung der Zertifikatsprüfung.
 
-Der Verbindungstest prüft beim OIDC-Anbieter die Discovery; bei LDAP TLS-Verbindung, Service-Bind und Base-DN. Die tatsächlichen Unternehmensanbieter müssen anschließend mit einem eingeladenen Testbenutzer geprüft werden. Es wurden hier keine Unternehmenszugangsdaten oder realen Tenant-/AD-Verbindungen bereitgestellt.
+Der Verbindungstest prüft beim OIDC-Anbieter die Discovery; bei LDAP TLS-Verbindung, Service-Bind und Base-DN. Die tatsächlichen Unternehmensanbieter müssen anschließend mit einem Testbenutzer geprüft werden; bei LDAP ist dafür eine passende Einladung erforderlich. Es wurden hier keine Unternehmenszugangsdaten oder realen Tenant-/AD-Verbindungen bereitgestellt.
 
 ## Daten und Betrieb
 

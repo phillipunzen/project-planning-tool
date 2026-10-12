@@ -18,7 +18,9 @@ const proxy = createServer((req, res) => {
     method: req.method,
     headers: {...req.headers, host:"127.0.0.1:8121", "x-forwarded-host":req.headers.host},
   }, response => {
-    res.writeHead(response.statusCode, response.headers);
+    const headers = { ...response.headers };
+    if (req.headers["x-test-strip-session-cookie"]) delete headers["set-cookie"];
+    res.writeHead(response.statusCode, headers);
     response.pipe(res);
   });
   upstream.on("error", () => {
@@ -73,7 +75,15 @@ try {
   await page
     .getByLabel("Passwort", { exact: true })
     .fill("BrowserPassword123!");
+  await desktopContext.setExtraHTTPHeaders({ "x-test-strip-session-cookie": "1" });
+  const setupResponse = page.waitForResponse(r => r.url().endsWith("/api/setup") && r.request().method() === "POST");
   await page.getByRole("button", { name: "Arbeitsbereich erstellen" }).click();
+  if ((await setupResponse).status() !== 201) throw new Error("Setup failed before session confirmation");
+  await expect(page.getByText("Die Anmeldesitzung konnte nicht bestätigt werden. Bitte erlaube Cookies für diese Website. Falls das Problem bleibt, wende dich an den Administrator.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Schön, dass du da bist.", exact: true })).toBeVisible();
+  await expect(page.getByLabel("E-Mail-Adresse", { exact: true })).toHaveValue("alex@test.example");
+  await desktopContext.setExtraHTTPHeaders({});
+  await page.getByRole("button", { name: "Anmelden", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Unser erstes Projekt", exact: true }),
   ).toBeVisible();
@@ -105,6 +115,25 @@ try {
   await expectTheme(page, "light");
   await page.getByLabel("Darstellung", { exact: true }).selectOption("system");
   console.log("PASS: Darstellung auf Anmeldung und Board, Systemwechsel, gespeicherte Auswahl, Dialoge und Tab-Synchronisierung");
+  const lostSessionContext = await browser.newContext({ locale: "de-DE", extraHTTPHeaders: { "x-test-strip-session-cookie": "1" } });
+  const lostSession = await lostSessionContext.newPage();
+  lostSession.on("pageerror", e => errors.push(e.message));
+  await lostSession.goto(base);
+  await lostSession.getByLabel("E-Mail-Adresse", { exact: true }).fill("alex@test.example");
+  await lostSession.getByLabel("Passwort", { exact: true }).fill("BrowserPassword123!");
+  const loginResponse = lostSession.waitForResponse(r => r.url().endsWith("/api/auth/login") && r.request().method() === "POST");
+  await lostSession.getByRole("button", { name: "Anmelden", exact: true }).click();
+  if ((await loginResponse).status() !== 200) throw new Error("The stripped-cookie login did not authenticate credentials");
+  await expect(lostSession.getByText("Die Anmeldesitzung konnte nicht bestätigt werden. Bitte erlaube Cookies für diese Website. Falls das Problem bleibt, wende dich an den Administrator.", { exact: true })).toBeVisible();
+  await expect(lostSession.getByRole("button", { name: "Anmelden", exact: true })).toBeEnabled();
+  await expect(lostSession.locator(".app-shell")).toHaveCount(0);
+  await lostSession.screenshot({ path: "artifacts/login-missing-cookie.png", fullPage: true });
+  await expect(lostSession.getByLabel("E-Mail-Adresse", { exact: true })).toHaveValue("alex@test.example");
+  await lostSessionContext.setExtraHTTPHeaders({});
+  await lostSession.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await expect(lostSession.locator(".task-card")).toHaveCount(6);
+  await lostSessionContext.close();
+  console.log("PASS: Erfolgreiche Zugangsdaten ohne Sitzungscookie zeigen einen Fehler und behalten das Anmeldeformular");
   await page.screenshot({
     path: "artifacts/board-desktop.png",
     fullPage: true,
@@ -326,12 +355,21 @@ try {
     viewport: { width: 1280, height: 900 },
   });
   other.on("pageerror", (e) => errors.push(e.message));
-  await other.goto(inviteUrl);
+  const inviteLocation = new URL(inviteUrl);
+  await other.goto(base + inviteLocation.pathname + inviteLocation.search);
   await other.getByLabel("Dein Name").fill("Kim Team");
   await other.getByLabel("Neues Passwort").fill("TeamPassword123!");
+  await other.context().setExtraHTTPHeaders({ "x-test-strip-session-cookie": "1" });
+  const acceptResponse = other.waitForResponse(r => r.url().includes("/accept") && r.request().method() === "POST");
   await other
     .getByRole("button", { name: "Konto erstellen & beitreten" })
     .click();
+  if ((await acceptResponse).status() !== 200) throw new Error("Invitation acceptance failed before session confirmation");
+  await expect(other.getByText("Die Anmeldesitzung konnte nicht bestätigt werden. Bitte erlaube Cookies für diese Website. Falls das Problem bleibt, wende dich an den Administrator.", { exact: true })).toBeVisible();
+  await expect(other.getByLabel("E-Mail-Adresse", { exact: true })).toHaveValue("team@test.example");
+  await other.context().setExtraHTTPHeaders({});
+  await other.getByLabel("Passwort", { exact: true }).fill("TeamPassword123!");
+  await other.getByRole("button", { name: "Anmelden", exact: true }).click();
   await expect(
     other.getByRole("heading", { name: "Unser erstes Projekt", exact: true }),
   ).toBeVisible();

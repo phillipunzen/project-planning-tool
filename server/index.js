@@ -43,6 +43,7 @@ import {
   ldapIdentity,
   resolveExternalUser,
   loginSession,
+  checkLoginTransport,
   requireUser,
   requireAdmin,
   member,
@@ -209,6 +210,7 @@ app.get(
 app.post(
   "/api/setup",
   api(async (req, res) => {
+    checkLoginTransport(req);
     const input = z
       .object({ name, email, password, sample: z.boolean().default(true) })
       .parse(req.body);
@@ -319,6 +321,7 @@ app.post(
 app.post(
   "/api/auth/login",
   api(async (req, res) => {
+    checkLoginTransport(req);
     const input = z
       .object({
         email: z.string().min(1).max(190),
@@ -371,6 +374,7 @@ app.post(
 app.get(
   "/api/auth/oidc",
   api(async (req, res) => {
+    checkLoginTransport(req);
     const c = await getAuth();
     if (c.provider !== "oidc")
       throw Object.assign(new Error("OpenID Connect ist nicht aktiviert."), {
@@ -512,6 +516,7 @@ app.get(
 app.post(
   "/api/invitations/:token/accept",
   api(async (req, res) => {
+    checkLoginTransport(req);
     const token = inviteToken.parse(req.params.token);
     const input = z
       .object({ name: name.optional(), password: password.optional() })
@@ -1666,7 +1671,7 @@ app.use((err, req, res, next) => {
   if (status >= 500) console.error("Request failed:", err.name, err.message);
   res.status(status).json({
     error:
-      status >= 500
+      status >= 500 && err.code !== "LOGIN_TRANSPORT"
         ? translateForRequest(
             req,
             "Ein interner Fehler ist aufgetreten. Bitte erneut versuchen.",

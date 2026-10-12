@@ -11,7 +11,7 @@ process.env.NODE_ENV = "test";
 process.env.DATABASE_NAME = "projektwerk_test";
 process.env.UPLOAD_DIR = "artifacts/auth-uploads";
 const { app } = await import("../server/index.js");
-const { db, Setting, User } = await import("../server/db.js");
+const { db, Setting, User, Membership } = await import("../server/db.js");
 const { ldapIdentity } = await import("../server/security.js");
 await db.sync({ force: true });
 await Setting.create({ key: "installation", value: "{}" });
@@ -207,14 +207,108 @@ await test("OIDC authorization code flow and directory identity", async (t) => {
     assert.equal((await c.call("/me")).status, 401);
     claimOverrides = {};
   });
-  await t.test("uninvited subject cannot provision an account", async () => {
-    const c = client(),
-      result = await finish(c, await start(c));
-    assert.match(result.location, /authError=/);
-    assert.equal((await c.call("/me")).status, 401);
-  });
   await t.test(
-    "valid PKCE, state, nonce and invited verified email create external identity",
+    "verified OIDC user registers without invitation or existing project access",
+    async () => {
+      const c = client(),
+        result = await finish(c, await start(c));
+      assert.equal(result.location, "/");
+      const me = await c.call("/me");
+      assert.equal(me.status, 200);
+      assert.equal(me.data.authType, "oidc");
+      assert.equal(me.data.role, "user");
+      const user = await User.findByPk(me.data.id);
+      assert.equal(user.password, null);
+      assert.equal(await Membership.count({ where: { UserId: user.id } }), 0);
+      assert.deepEqual((await c.call("/projects")).data, []);
+      assert.equal((await c.call(`/projects/${pid}/members`)).status, 403);
+      const created = await c.call("/projects", "POST", {
+        name: "OIDC project",
+      });
+      assert.equal(created.status, 201);
+      assert.equal((await c.call("/admin/users")).status, 403);
+    },
+  );
+  await t.test(
+    "OIDC registration preserves existing accounts with matching email",
+    async () => {
+      const before = await User.findOne({
+        where: { email: "local@test.example" },
+      });
+      const count = await User.count();
+      claimOverrides = { sub: "admin-collision", email: "local@test.example" };
+      try {
+        const c = client(),
+          result = await finish(c, await start(c));
+        assert.match(result.location, /authError=/);
+        assert.match(
+          decodeURIComponent(result.location),
+          /bereits zu einem anderen Konto/,
+        );
+        assert.equal((await c.call("/me")).status, 401);
+        assert.equal(await User.count(), count);
+        assert.deepEqual(
+          (await User.findByPk(before.id)).toJSON(),
+          before.toJSON(),
+        );
+      } finally {
+        claimOverrides = {};
+      }
+    },
+  );
+  await t.test(
+    "another OIDC subject cannot take over an existing OIDC account",
+    async () => {
+      claimOverrides = { sub: "subject-other" };
+      try {
+        const c = client(),
+          result = await finish(c, await start(c));
+        assert.match(result.location, /authError=/);
+        assert.equal((await c.call("/me")).status, 401);
+        assert.equal(
+          await User.count({ where: { email: "external@test.example" } }),
+          1,
+        );
+      } finally {
+        claimOverrides = {};
+      }
+    },
+  );
+  await t.test(
+    "concurrent first OIDC sign-ins create one normal account",
+    async () => {
+      claimOverrides = {
+        sub: "subject-concurrent",
+        email: "parallel@test.example",
+      };
+      try {
+        const first = client(),
+          second = client();
+        const flows = await Promise.all([start(first), start(second)]);
+        const results = await Promise.all([
+          finish(first, flows[0]),
+          finish(second, flows[1]),
+        ]);
+        assert.ok(results.every((result) => result.location === "/"));
+        const [a, b] = await Promise.all([
+          first.call("/me"),
+          second.call("/me"),
+        ]);
+        assert.equal(a.status, 200);
+        assert.equal(b.status, 200);
+        assert.equal(a.data.id, b.data.id);
+        assert.equal(a.data.role, "user");
+        assert.equal(
+          await User.count({ where: { email: "parallel@test.example" } }),
+          1,
+        );
+      } finally {
+        claimOverrides = {};
+      }
+    },
+  );
+  await t.test(
+    "OIDC sign-in with project invitation keeps the invitation flow available",
     async () => {
       const c = client();
       const result = await finish(c, await start(c, invite));
@@ -226,7 +320,11 @@ await test("OIDC authorization code flow and directory identity", async (t) => {
         (await c.call(`/invitations/${invite}/accept`, "POST", {})).status,
         200,
       );
-      assert.equal((await c.call("/projects")).data.length, 1);
+      assert.equal((await c.call("/projects")).data.length, 2);
+      assert.equal(
+        await User.count({ where: { email: "external@test.example" } }),
+        1,
+      );
       assert.match(result.location, /invite/);
     },
   );

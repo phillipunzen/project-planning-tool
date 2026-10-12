@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 process.env.NODE_ENV = "test";
 process.env.ALLOWED_ORIGINS = "http://localhost:54734";
 process.env.DATABASE_NAME = "projektwerk_test";
@@ -1068,6 +1070,122 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
       });
       assert.deepEqual(await fs.readdir("artifacts/test-uploads/branding"), []);
       await admin.call("/admin/branding", "PUT", { name: "Projektwerk" });
+    },
+  );
+  await t.test(
+    "HTTPS proxy misconfiguration fails before account creation and trusted HTTPS forwarding preserves secure sessions",
+    async () => {
+      const identity = (await admin.call("/me")).data;
+      async function withHttpsApp(trustProxy, check) {
+        const child = spawn(
+          process.execPath,
+          [
+            "--input-type=module",
+            "-e",
+            'import { app } from "./server/index.js"; const server = app.listen(0,"127.0.0.1",()=>console.log(JSON.stringify({port:server.address().port})));',
+          ],
+          {
+            cwd: process.cwd(),
+            env: {
+              ...process.env,
+              APP_URL: "https://planner.test.example",
+              ALLOWED_ORIGINS: "",
+              TRUST_PROXY: trustProxy,
+            },
+            stdio: ["ignore", "pipe", "pipe"],
+          },
+        );
+        let ready = false;
+        try {
+          const port = await new Promise((resolve, reject) => {
+            const timer = setTimeout(
+              () => reject(new Error("HTTPS fixture startup timed out")),
+              15000,
+            );
+            let output = "";
+            const fail = (error) => {
+              clearTimeout(timer);
+              reject(error);
+            };
+            child.once("error", fail);
+            child.once("exit", (code) => {
+              if (!ready) fail(new Error(`HTTPS fixture exited: ${code}`));
+            });
+            child.stdout.on("data", (chunk) => {
+              output += chunk;
+              const line = output
+                .split("\n")
+                .slice(0, -1)
+                .find((line) => line.startsWith('{"port":'));
+              if (line && !ready) {
+                ready = true;
+                clearTimeout(timer);
+                resolve(JSON.parse(line).port);
+              }
+            });
+          });
+          const endpoint = `http://127.0.0.1:${port}/api`;
+          const headers = {
+            Origin: "https://planner.test.example",
+            "Content-Type": "application/json",
+            "Accept-Language": "en",
+            "X-Forwarded-Proto": "https",
+          };
+          await check(endpoint, headers);
+        } finally {
+          if (child.exitCode === null) {
+            const exited = once(child, "exit");
+            child.kill("SIGTERM");
+            await exited;
+          }
+        }
+      }
+      await withHttpsApp("0", async (endpoint, headers) => {
+        const count = await User.count();
+        const setup = await fetch(endpoint + "/setup", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            name: "Unexpected Admin",
+            email: "proxy@test.example",
+            password: "ProxyPassword123!",
+          }),
+        });
+        assert.equal(setup.status, 503);
+        assert.match((await setup.json()).error, /APP_URL and TRUST_PROXY/);
+        assert.equal(await User.count(), count);
+        assert.equal(setup.headers.get("set-cookie"), null);
+        const login = await fetch(endpoint + "/auth/login", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ email: identity.email, password: "TestPw123!" }),
+        });
+        assert.equal(login.status, 503);
+        assert.match((await login.json()).error, /secure sign-in session/);
+      });
+      await withHttpsApp("1", async (endpoint, headers) => {
+        const login = await fetch(endpoint + "/auth/login", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ email: identity.email, password: "TestPw123!" }),
+        });
+        assert.equal(login.status, 200);
+        const cookie = login.headers.get("set-cookie");
+        assert.match(cookie, /; Secure/);
+        assert.match(cookie, /; HttpOnly/);
+        const me = await fetch(endpoint + "/me", {
+          headers: { ...headers, Cookie: cookie.split(";")[0] },
+        });
+        assert.equal(me.status, 200);
+        assert.equal((await me.json()).id, identity.id);
+        const { "X-Forwarded-Proto": ignored, ...withoutForwarding } = headers;
+        const wrongProxy = await fetch(endpoint + "/auth/login", {
+          method: "POST",
+          headers: withoutForwarding,
+          body: JSON.stringify({ email: identity.email, password: "TestPw123!" }),
+        });
+        assert.equal(wrongProxy.status, 503);
+      });
     },
   );
   await t.test("disabled user sessions stop working immediately", async () => {

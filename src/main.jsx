@@ -112,6 +112,22 @@ async function api(url, options = {}) {
     );
   return data;
 }
+async function confirmLoginSession(expectedUser) {
+  try {
+    const user = await api("/me");
+    if (user.id !== expectedUser.id)
+      throw Object.assign(new Error(), { status: 401 });
+    return user;
+  } catch (error) {
+    if (error.status === 401)
+      throw new Error(
+        t(
+          "Die Anmeldesitzung konnte nicht bestätigt werden. Bitte erlaube Cookies für diese Website. Falls das Problem bleibt, wende dich an den Administrator.",
+        ),
+      );
+    throw error;
+  }
+}
 const bucketIsDone = (columns, column) =>
   column.isDone ?? column.id === columns.at(-1)?.id;
 const cardIsDone = (board, card) =>
@@ -429,6 +445,10 @@ function App() {
     const timer = setInterval(load, 5000);
     return () => clearInterval(timer);
   }, [boardId, subview, view]);
+  function finishLogin(user) {
+    setPublicInfo((info) => ({ ...info, setupRequired: false }));
+    setUser(user);
+  }
   async function logout() {
     try {
       await api("/auth/logout", { method: "POST" });
@@ -517,12 +537,11 @@ function App() {
           token={invite}
           user={user}
           publicInfo={publicInfo}
-          onLogin={(u) => setUser(u)}
-          onDone={async (u) => {
-            setUser(u);
+          onLogin={finishLogin}
+          onDone={(u) => {
+            finishLogin(u);
             setInvite(null);
             history.replaceState(null, "", "/");
-            await boot();
           }}
         />
       </>
@@ -531,13 +550,7 @@ function App() {
     return (
       <>
         <ThemeControl floating />
-        <AuthScreen
-          info={publicInfo}
-          onSuccess={async (u) => {
-            setUser(u);
-            await boot();
-          }}
-        />
+        <AuthScreen info={publicInfo} onSuccess={finishLogin} />
       </>
     );
   return (
@@ -1179,38 +1192,44 @@ function ProfileModal({ user, onClose, onSaved }) {
     </Modal>
   );
 }
-function AuthScreen({ info, onSuccess, invitation = null, token }) {
+function AuthScreen({
+  info,
+  onSuccess,
+  invitation = null,
+  token,
+  initialError = "",
+}) {
   const brand = useBranding();
   const [error, setError] = useState(
-      new URLSearchParams(location.search).get("authError") || "",
+      initialError || new URLSearchParams(location.search).get("authError") || "",
     ),
     [busy, setBusy] = useState(false),
     [method, setMethod] = useState(info.provider === "ldap" ? "ldap" : "local");
-  const setup = info.setupRequired;
+  const [setup, setSetup] = useState(info.setupRequired);
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
     setError("");
     const f = new FormData(e.currentTarget);
     try {
-      onSuccess(
-        await api(setup ? "/setup" : "/auth/login", {
-          method: "POST",
-          body: setup
-            ? {
-                name: f.get("name"),
-                email: f.get("email"),
-                password: f.get("password"),
-                sample: f.get("sample") === "on",
-              }
-            : {
-                email: f.get("email"),
-                password: f.get("password"),
-                method,
-                invite: token,
-              },
-        }),
-      );
+      const authenticated = await api(setup ? "/setup" : "/auth/login", {
+        method: "POST",
+        body: setup
+          ? {
+              name: f.get("name"),
+              email: f.get("email"),
+              password: f.get("password"),
+              sample: f.get("sample") === "on",
+            }
+          : {
+              email: f.get("email"),
+              password: f.get("password"),
+              method,
+              invite: token,
+            },
+      });
+      setSetup(false);
+      await onSuccess(await confirmLoginSession(authenticated));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -1418,7 +1437,8 @@ function InviteScreen({ token, user, publicInfo, onLogin, onDone }) {
   const [info, setInfo] = useState(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [login, setLogin] = useState(false);
+    [login, setLogin] = useState(false),
+    [acceptedUserId, setAcceptedUserId] = useState(null);
   useEffect(() => {
     api(`/invitations/${token}`)
       .then(setInfo)
@@ -1429,15 +1449,17 @@ function InviteScreen({ token, user, publicInfo, onLogin, onDone }) {
     setBusy(true);
     setError("");
     const f = e ? new FormData(e.currentTarget) : null;
+    let accepted;
     try {
-      onDone(
-        await api(`/invitations/${token}/accept`, {
-          method: "POST",
-          body: f ? { name: f.get("name"), password: f.get("password") } : {},
-        }),
-      );
+      accepted = await api(`/invitations/${token}/accept`, {
+        method: "POST",
+        body: f ? { name: f.get("name"), password: f.get("password") } : {},
+      });
+      setAcceptedUserId(accepted.id);
+      await onDone(await confirmLoginSession(accepted));
     } catch (e) {
       setError(e.message);
+      if (accepted) setLogin(true);
     } finally {
       setBusy(false);
     }
@@ -1447,9 +1469,11 @@ function InviteScreen({ token, user, publicInfo, onLogin, onDone }) {
       <AuthScreen
         info={publicInfo}
         invitation={info}
-        token={token}
-        onSuccess={(u) => {
-          onLogin(u);
+        token={acceptedUserId ? undefined : token}
+        initialError={error}
+        onSuccess={async (u) => {
+          if (acceptedUserId === u.id) await onDone(u);
+          else await onLogin(u);
           setLogin(false);
         }}
       />
@@ -3799,7 +3823,7 @@ function Admin({ user, notify, onUpdate }) {
                 </label>
                 <p className="form-note">
                   {t(
-                    "Standardmäßig wird email_verified=true verlangt. Für Entra ID nur aktivieren, wenn dein Tenant die E-Mail-Adressen verlässlich verwaltet. Beim ersten externen Login ist ein passender Einladungslink erforderlich.",
+                    "Standardmäßig wird email_verified=true verlangt. Für Entra ID nur aktivieren, wenn dein Tenant die E-Mail-Adressen verlässlich verwaltet. Neue OIDC-Benutzer werden bei der ersten Anmeldung automatisch registriert. Projekteinladungen werden nur für den Zugriff auf bestehende Projekte benötigt.",
                   )}
                 </p>
               </>
