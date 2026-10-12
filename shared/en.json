@@ -439,5 +439,11 @@
   "Dokumentation": "Documentation",
   "Ideen": "Ideas",
   "Die Anmeldesitzung konnte nicht bestätigt werden. Bitte erlaube Cookies für diese Website. Falls das Problem bleibt, wende dich an den Administrator.": "The sign-in session could not be confirmed. Please allow cookies for this website. If the problem persists, contact your administrator.",
-  "Die sichere Anmeldesitzung konnte nicht gesetzt werden. Bitte APP_URL und TRUST_PROXY sowie die HTTPS-Weiterleitung am Reverse Proxy prüfen.": "The secure sign-in session could not be set. Please check APP_URL and TRUST_PROXY and the HTTPS forwarding at the reverse proxy."
+  "Die sichere Anmeldesitzung konnte nicht gesetzt werden. Bitte APP_URL und TRUST_PROXY sowie die HTTPS-Weiterleitung am Reverse Proxy prüfen.": "The secure sign-in session could not be set. Please check APP_URL and TRUST_PROXY and the HTTPS forwarding at the reverse proxy.",
+  "App installieren": "Install app",
+  "Öffne deinen Arbeitsbereich direkt vom Startbildschirm oder Desktop.": "Open your workspace directly from your home screen or desktop.",
+  "Für die Installation bitte die HTTPS-Adresse der Anwendung öffnen.": "To install the app, open its HTTPS address.",
+  "Im Browsermenü „App installieren“ oder „Zum Startbildschirm hinzufügen“ wählen.": "Choose “Install app” or “Add to home screen” in the browser menu.",
+  "In Safari das Teilen-Menü öffnen und „Zum Home-Bildschirm“ wählen.": "In Safari, open the Share menu and choose “Add to Home Screen”.",
+  "Für Projekte und Änderungen wird weiterhin eine Internetverbindung benötigt.": "Projects and changes still require an internet connection."
 }

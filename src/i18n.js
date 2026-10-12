@@ -17,6 +17,12 @@ export const t = (message, params) =>
 function applyLanguage() {
   document.documentElement.lang = language;
   document.title = t("{0} · Gemeinsam mehr bewegen", [getBranding().name]);
+  try {
+    localStorage.setItem("projektwerk-pwa-language", language);
+    localStorage.setItem("projektwerk-pwa-name", getBranding().name);
+  } catch {
+    // Browser storage is optional.
+  }
 }
 export function setLanguagePreference(value) {
   preference = ["de", "en"].includes(value) ? value : "system";

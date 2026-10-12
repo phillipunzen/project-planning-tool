@@ -73,6 +73,7 @@ import {
   Globe,
   BookOpen,
   Lightbulb,
+  Download,
 } from "lucide-react";
 import "./styles.css";
 import { ThemeProvider, ThemeControl } from "./theme.jsx";
@@ -86,6 +87,7 @@ import {
 import { useBranding, setBranding } from "./branding.js";
 import { projectIcons } from "../shared/project-icons.js";
 import { CardAutosave } from "./card-autosave.js";
+import { usePwaInstalled, promptInstall } from "./pwa.js";
 async function api(url, options = {}) {
   const response = await fetch(`/api${url}`, {
     credentials: "same-origin",
@@ -288,6 +290,7 @@ function FormError({ error }) {
 }
 function App() {
   useLanguage();
+  const pwaInstalled = usePwaInstalled();
   const [publicInfo, setPublicInfo] = useState(null),
     [user, setUser] = useState(null),
     [loading, setLoading] = useState(true),
@@ -670,6 +673,20 @@ function App() {
             <Users size={17} />
             {t(" Profileinstellungen")}
           </button>
+          {!pwaInstalled && (
+            <button
+              className="settings-nav"
+              onClick={async () => {
+                if ((await promptInstall()) === "unavailable") {
+                  setModal({ type: "install" });
+                  setSideOpen(false);
+                }
+              }}
+            >
+              <Download size={17} />
+              {t("App installieren")}
+            </button>
+          )}
           <div className="user-row">
             <Avatar user={user} />
             <div>
@@ -997,6 +1014,46 @@ function App() {
             </div>
           ))}
       </main>
+      {modal?.type === "install" && (
+        <Modal title={t("App installieren")} onClose={() => setModal(null)}>
+          <p>
+            {t(
+              "Öffne deinen Arbeitsbereich direkt vom Startbildschirm oder Desktop.",
+            )}
+          </p>
+          {!window.isSecureContext && (
+            <p className="form-note">
+              {t(
+                "Für die Installation bitte die HTTPS-Adresse der Anwendung öffnen.",
+              )}
+            </p>
+          )}
+          <p>
+            <strong>Chrome / Edge</strong>
+            <br />
+            {t(
+              "Im Browsermenü „App installieren“ oder „Zum Startbildschirm hinzufügen“ wählen.",
+            )}
+          </p>
+          <p>
+            <strong>iPhone / iPad</strong>
+            <br />
+            {t(
+              "In Safari das Teilen-Menü öffnen und „Zum Home-Bildschirm“ wählen.",
+            )}
+          </p>
+          <p className="form-note">
+            {t(
+              "Für Projekte und Änderungen wird weiterhin eine Internetverbindung benötigt.",
+            )}
+          </p>
+          <div className="modal-actions">
+            <button className="button primary" onClick={() => setModal(null)}>
+              {t("Schließen")}
+            </button>
+          </div>
+        </Modal>
+      )}
       {modal?.type === "profile" && (
         <ProfileModal
           user={user}

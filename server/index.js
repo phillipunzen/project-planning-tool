@@ -5,6 +5,7 @@ import {
   translateForLanguage,
 } from "./language.js";
 import { projectIcons } from "../shared/project-icons.js";
+import { appManifest } from "../shared/pwa.js";
 import "dotenv/config";
 import express from "express";
 import helmet from "helmet";
@@ -187,6 +188,14 @@ app.get(
       providerName: c.oidc.name || "Single Sign-on",
       branding: publicBranding(await readBranding()),
     });
+  }),
+);
+app.get(
+  "/api/manifest.webmanifest",
+  api(async (req, res) => {
+    res
+      .type("application/manifest+json")
+      .json(appManifest((await readBranding()).name));
   }),
 );
 app.get(
@@ -1649,7 +1658,16 @@ const dist = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../dist",
 );
-app.use(express.static(dist, { index: false, maxAge: "1h" }));
+app.use(express.static(dist, {
+  index: false,
+  maxAge: "1h",
+  setHeaders(res, filePath) {
+    if (path.basename(filePath) === "sw.js") {
+      res.set("Cache-Control", "no-cache");
+      res.set("Service-Worker-Allowed", "/");
+    }
+  },
+}));
 app.get("/{*path}", (req, res) => res.sendFile(path.join(dist, "index.html")));
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError)

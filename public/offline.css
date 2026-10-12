@@ -1,0 +1,69 @@
+:root {
+  color-scheme: light;
+  --bg: #fafbfc;
+  --surface: #fff;
+  --text: #172033;
+  --muted: #667085;
+  --border: #e6e8ef;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111827;
+  --surface: #172033;
+  --text: #f1f5f9;
+  --muted: #a4afc2;
+  --border: #2c3950;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, sans-serif;
+}
+main {
+  width: min(100%, 480px);
+  padding: 40px 28px;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--surface);
+}
+img {
+  border-radius: 20px;
+}
+#brand {
+  font-weight: 650;
+  color: var(--muted);
+}
+h1 {
+  font-size: clamp(24px, 5vw, 30px);
+  letter-spacing: -0.03em;
+}
+#message {
+  color: var(--muted);
+  line-height: 1.6;
+  margin-bottom: 28px;
+}
+button {
+  border: 0;
+  border-radius: 12px;
+  background: #4f46e5;
+  color: white;
+  padding: 14px 22px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 48px;
+}
+button:focus-visible {
+  outline: 3px solid #a5b4fc;
+  outline-offset: 4px;
+}

@@ -144,6 +144,16 @@ ALLOWED_ORIGINS=http://localhost:54734
 
 Mehrere Adressen mit Komma trennen. Anschließend `docker compose up -d app` ausführen. Wildcards, fremde Webseiten und automatisch übernommene Forwarded-Host-Header werden nicht freigegeben. `APP_URL` bleibt die feste Hauptadresse für Einladungslinks und SSO-Redirects; bei Firmenanmeldung diese Hauptadresse verwenden. Die aktuelle Vorschauadresse dieser Arbeitsumgebung ist bereits zusätzlich konfiguriert.
 
+## Installation als PWA
+
+Die Anwendung lässt sich unter ihrer HTTPS-Adresse als App mit eigenem Fenster installieren. Unter **App installieren** in der Navigation startet ein unterstützender Browser seinen Installationsdialog. Alternativ im Browsermenü **App installieren** / **Zum Startbildschirm hinzufügen** wählen. Auf iPhone/iPad die Website in Safari öffnen und **Teilen → Zum Home-Bildschirm** verwenden. Die lokale Entwicklung unter `localhost` oder `127.0.0.1` ist ebenfalls möglich; eine gewöhnliche HTTP-Adresse im LAN reicht für Service Worker und PWA-Installation nicht aus.
+
+Das öffentliche App-Manifest unter `/api/manifest.webmanifest` übernimmt den in der Administration eingestellten Systemnamen. App-Icons sind für Desktop, Android (einschließlich maskierbarer Icons) und Apple-Geräte vorhanden. Bereits installierte Apps übernehmen Metadatenänderungen abhängig vom Browser; bei Bedarf neu installieren.
+
+Für Anmeldung, Projekte, Anhänge und Änderungen ist eine Verbindung zum Server nötig. Ohne Verbindung zeigt die App nach dem ersten Online-Aufruf eine Hinweisseite mit Wiederholungsbutton. Diese berücksichtigt die zuletzt verwendete Sprache, den Systemnamen und die Darstellung. Der Service Worker speichert ausschließlich öffentliche Ressourcen dieser Hinweisseite; Projektinhalte, API-Antworten, Anmeldungen und Schreibzugriffe werden nicht zwischengespeichert oder für später eingereiht.
+
+Neue Versionen werden beim Öffnen geprüft. Ein aktualisierter Service Worker wartet, bis vorhandene App-Fenster geschlossen sind, damit offene Eingaben durch einen automatischen Neustart nicht verloren gehen. Beim nächsten Öffnen wird die neue Version verwendet. Vite erzeugt aus App und Offline-Ressourcen automatisch die Cache-Version; Service Worker werden ohne HTTP-Cache-Verzögerung geprüft.
+
 ## Anmeldeanbieter
 
 ### Lokale Anmeldung
@@ -230,7 +240,7 @@ npx playwright install chromium
 DATABASE_HOST=127.0.0.1 DATABASE_PORT=3317 npm run test:ui
 ```
 
-Tests nacheinander ausführen: API-, Auth- und Browsertests setzen dieselbe Testdatenbank zurück. API-Tests prüfen mit echter MariaDB unter anderem Einladungen, Rollen, geschützte Downloads, Uploadgrenzen, konkurrierende Änderungen und Sitzungswiderruf. Auth-Tests simulieren einen OIDC-Anbieter mit signierten Tokens und LDAP-Clientantworten; sie ersetzen keine Prüfung mit dem eigenen AD/Tenant. Browsertests prüfen Einrichtung, Kanban per Maus/Touch/Tastatur, Kartendetails, Uploads, Kommentare, Einladung eines zweiten Benutzers und mobile Ansichten. Screenshots entstehen unter `artifacts/`.
+Tests nacheinander ausführen: API-, Auth-, Browser- und PWA-Tests setzen dieselbe Testdatenbank zurück. API-Tests prüfen mit echter MariaDB unter anderem Einladungen, Rollen, geschützte Downloads, Uploadgrenzen, konkurrierende Änderungen und Sitzungswiderruf. Auth-Tests simulieren einen OIDC-Anbieter mit signierten Tokens und LDAP-Clientantworten; sie ersetzen keine Prüfung mit dem eigenen AD/Tenant. Browsertests prüfen Einrichtung, Kanban per Maus/Touch/Tastatur, Kartendetails, Uploads, Kommentare, Einladung eines zweiten Benutzers und mobile Ansichten. Screenshots entstehen unter `artifacts/`.
 
 ## Compose-Konfiguration prüfen
 
@@ -246,3 +256,5 @@ Diese Prüfung verwendet Beispielwerte ohne echte Zugangsdaten. Sie prüft, dass
 - [ldapts: Bind, StartTLS und Suchfilter](https://github.com/ldapts/ldapts)
 - [dnd-kit: Sortable und Eingabesensoren](https://dndkit.com/legacy/presets/sortable/overview/)
 - [Sequelize: MariaDB-Dialekt](https://sequelize.org/docs/v6/other-topics/dialect-specific-things/)
+
+PWA-Browserprüfung nach `npm run build` mit `npm run test:pwa` ausführen (dieselbe Datenbankverbindung wie bei `test:ui`). Sie prüft die Installierbarkeit mit Chromium, Manifest und Icons, öffentliche Offline-Caches, ausgeschlossene API-Zugriffe, deutsche/englische Hinweisseiten, Dark Mode und Updates ohne erzwungenes Neuladen. Der native Installationsdialog wird über sein Browser-Ereignis getestet; die tatsächliche Installation auf iOS und Android ist anschließend am jeweiligen Gerät zu prüfen.
