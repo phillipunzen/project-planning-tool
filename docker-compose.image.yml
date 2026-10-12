@@ -1,0 +1,5 @@
+# Compatibility override: docker-compose.yml already uses the published image.
+services:
+  app:
+    image: ${APP_IMAGE:-ghcr.io/phillipunzen/project-planning-tool:latest}
+    pull_policy: always

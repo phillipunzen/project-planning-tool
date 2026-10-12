@@ -1,3 +1,10 @@
+import { readBranding, publicBranding, saveBranding, logoDir } from "./branding.js";
+import {
+  requestLanguage,
+  translateForRequest,
+  translateForLanguage,
+} from "./language.js";
+import { projectIcons } from "../shared/project-icons.js";
 import "dotenv/config";
 import express from "express";
 import helmet from "helmet";
@@ -130,26 +137,34 @@ const name = z.string().trim().min(1).max(100);
 const color = z.string().regex(/^#[0-9a-f]{6}$/i);
 const uuid = z.uuid();
 const inviteToken = z.string().regex(/^[a-f0-9]{64}$/);
-const columns = () => [
-  { id: randomUUID(), name: "Offen", color: "#94a3b8" },
-  { id: randomUUID(), name: "In Arbeit", color: "#6366f1" },
-  { id: randomUUID(), name: "Review", color: "#f59e0b" },
-  { id: randomUUID(), name: "Erledigt", color: "#10b981" },
-];
+const columns = (language = "de") =>
+  [
+    { id: randomUUID(), name: "Offen", color: "#94a3b8", isDone: false },
+    { id: randomUUID(), name: "In Arbeit", color: "#6366f1", isDone: false },
+    { id: randomUUID(), name: "Review", color: "#f59e0b", isDone: false },
+    { id: randomUUID(), name: "Erledigt", color: "#10b981", isDone: true },
+  ].map((column) => ({
+    ...column,
+    name: translateForLanguage(language, column.name),
+  }));
 async function log(req, b, action, cardTitle, t) {
   await Activity.create(
     { BoardId: b.id, UserId: req.user.id, action, cardTitle },
     { transaction: t },
   );
 }
-async function createProject(userId, data, t) {
+async function createProject(userId, data, t, language = "de") {
   const p = await Project.create(data, { transaction: t });
   await Membership.create(
     { ProjectId: p.id, UserId: userId, role: "owner" },
     { transaction: t },
   );
   const b = await Board.create(
-    { ProjectId: p.id, name: "Projektboard", columns: columns() },
+    {
+      ProjectId: p.id,
+      name: translateForLanguage(language, "Projektboard"),
+      columns: columns(language),
+    },
     { transaction: t },
   );
   return { project: p, board: b };
@@ -169,7 +184,26 @@ app.get(
       setupRequired: !(await User.count()),
       provider: c.provider,
       providerName: c.oidc.name || "Single Sign-on",
+      branding: publicBranding(await readBranding()),
     });
+  }),
+);
+app.get(
+  "/api/branding/logo/:id",
+  api(async (req, res) => {
+    const brand = await readBranding();
+    if (!brand.logo || brand.logo.id !== req.params.id)
+      return res.sendStatus(404);
+    try {
+      const buffer = await fs.readFile(path.join(logoDir, brand.logo.id));
+      res
+        .type(brand.logo.mime)
+        .set("Content-Disposition", "inline")
+        .send(buffer);
+    } catch (error) {
+      if (error.code === "ENOENT") return res.sendStatus(404);
+      throw error;
+    }
   }),
 );
 app.post(
@@ -198,16 +232,20 @@ app.post(
         { transaction: t },
       );
       if (input.sample) {
+        const language = requestLanguage(req);
         const { board } = await createProject(
           u.id,
           {
-            name: "Unser erstes Projekt",
-            description:
+            name: translateForLanguage(language, "Unser erstes Projekt"),
+            description: translateForLanguage(
+              language,
               "Ein Platz für Ideen, Aufgaben und alles, was wir gemeinsam bewegen.",
+            ),
             color: "#6366f1",
             icon: "layers",
           },
           t,
+          language,
         );
         const examples = [
           [
@@ -258,12 +296,14 @@ app.post(
           await Card.create(
             {
               BoardId: board.id,
-              title,
-              description,
+              title: translateForLanguage(language, title),
+              description: translateForLanguage(language, description),
               columnId: board.columns[col].id,
               position: i,
               priority,
-              labels,
+              labels: labels.map((label) =>
+                translateForLanguage(language, label),
+              ),
               assigneeId: u.id,
             },
             { transaction: t },
@@ -420,6 +460,18 @@ app.get(
   }),
 );
 app.get("/api/me", requireUser, (req, res) => res.json(publicUser(req.user)));
+app.patch(
+  "/api/me",
+  requireUser,
+  api(async (req, res) => {
+    const input = z
+      .object({ language: z.enum(["system", "de", "en"]) })
+      .strict()
+      .parse(req.body);
+    await req.user.update(input);
+    res.json(publicUser(req.user));
+  }),
+);
 app.post(
   "/api/auth/logout",
   api(async (req, res) => {
@@ -555,12 +607,12 @@ app.post(
         description: z.string().max(5000).default(""),
         color: color.default("#6366f1"),
         icon: z
-          .enum(["layers", "code", "rocket", "palette", "briefcase"])
+          .enum(Object.keys(projectIcons))
           .default("layers"),
       })
       .parse(req.body);
     const result = await db.transaction((t) =>
-      createProject(req.user.id, input, t),
+      createProject(req.user.id, input, t, requestLanguage(req)),
     );
     res.status(201).json(result.project);
   }),
@@ -574,6 +626,7 @@ app.patch(
         name: name.optional(),
         description: z.string().max(5000).optional(),
         color: color.optional(),
+        icon: z.enum(Object.keys(projectIcons)).optional(),
         archived: z.boolean().optional(),
       })
       .parse(req.body);
@@ -778,15 +831,13 @@ app.post(
   api(async (req, res) => {
     await member(req, req.params.id, true);
     const input = z.object({ name }).parse(req.body);
-    res
-      .status(201)
-      .json(
-        await Board.create({
-          ProjectId: req.params.id,
-          name: input.name,
-          columns: columns(),
-        }),
-      );
+    res.status(201).json(
+      await Board.create({
+        ProjectId: req.params.id,
+        name: input.name,
+        columns: columns(requestLanguage(req)),
+      }),
+    );
   }),
 );
 app.get(
@@ -842,7 +893,9 @@ app.patch(
         name: name.optional(),
         revision: z.number().int(),
         columns: z
-          .array(z.object({ id: uuid, name, color }))
+          .array(
+            z.object({ id: uuid, name, color, isDone: z.boolean().optional() }),
+          )
           .min(1)
           .max(12)
           .optional(),
@@ -858,6 +911,16 @@ app.patch(
     await db.transaction(async (t) => {
       const b = await lockedBoard(req, req.params.id, t, input.revision);
       if (input.columns) {
+        const previous = new Map(
+          b.columns.map((c, index) => [
+            c.id,
+            c.isDone ?? index === b.columns.length - 1,
+          ]),
+        );
+        input.columns = input.columns.map((c) => ({
+          ...c,
+          isDone: c.isDone ?? previous.get(c.id) ?? false,
+        }));
         const occupied = await Card.findAll({
           where: { BoardId: b.id },
           attributes: ["columnId"],
@@ -882,11 +945,13 @@ app.patch(
     res.json({ ok: true });
   }),
 );
+const cardProgress = z.number().int().min(0).max(100).multipleOf(25);
 const cardInput = z.object({
   title: z.string().trim().min(1).max(200),
   description: z.string().max(20000).default(""),
   columnId: uuid,
   priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
+  progress: cardProgress.default(0),
   dueDate: z.iso.date().nullable().default(null),
   assigneeId: uuid.nullable().default(null),
   labels: z.array(z.string().trim().min(1).max(30)).max(8).default([]),
@@ -899,12 +964,25 @@ const cardInput = z.object({
       }),
     )
     .max(50)
-    .default([])
     .refine(
       (items) => new Set(items.map((i) => i.id)).size === items.length,
       "Checklisten-IDs müssen eindeutig sein.",
-    ),
+    )
+    .default([]),
 });
+const cardPatchInput = z
+  .object(
+    Object.fromEntries(
+      Object.entries(cardInput.shape).map(([key, schema]) => [
+        key,
+        (schema instanceof z.ZodDefault
+          ? schema.removeDefault()
+          : schema
+        ).optional(),
+      ]),
+    ),
+  )
+  .extend({ version: z.number().int().nonnegative() });
 async function validateCardFields(b, input, t) {
   if (!b.columns.some((c) => c.id === input.columnId))
     throw Object.assign(new Error("Ungültige Spalte."), { status: 400 });
@@ -950,10 +1028,8 @@ app.post(
 app.patch(
   "/api/cards/:id",
   api(async (req, res) => {
-    const input = cardInput
-      .extend({ version: z.number().int().nonnegative() })
-      .parse(req.body);
-    await db.transaction(async (t) => {
+    const input = cardPatchInput.parse(req.body);
+    const updated = await db.transaction(async (t) => {
       const initial = await Card.findByPk(req.params.id, { transaction: t });
       if (!initial)
         throw Object.assign(new Error("Aufgabe nicht gefunden."), {
@@ -971,32 +1047,43 @@ app.patch(
           ),
           { status: 409 },
         );
-      await validateCardFields(b, input, t);
+      const merged = { ...c.toJSON(), ...input };
+      await validateCardFields(b, merged, t);
       let position = c.position;
-      if (c.columnId !== input.columnId) {
+      if (c.columnId !== merged.columnId) {
         const max = await Card.max("position", {
-          where: { BoardId: b.id, columnId: input.columnId },
+          where: { BoardId: b.id, columnId: merged.columnId },
           transaction: t,
         });
         position = (Number.isFinite(max) ? max : -1) + 1;
       }
       const oldColumn = c.columnId;
+      const oldProgress = c.progress;
       await c.update(
         { ...input, position, version: c.version + 1 },
         { transaction: t },
       );
       await b.increment("revision", { transaction: t });
+      if (c.progress !== oldProgress)
+        await log(
+          req,
+          b,
+          `Fortschritt geändert: ${oldProgress} % → ${c.progress} %`,
+          c.title,
+          t,
+        );
       await log(
         req,
         b,
-        oldColumn === input.columnId
+        oldColumn === merged.columnId
           ? "Aufgabe aktualisiert"
-          : `Status geändert: ${b.columns.find((col) => col.id === input.columnId).name}`,
+          : `Status geändert: ${b.columns.find((col) => col.id === merged.columnId).name}`,
         c.title,
         t,
       );
+      return { version: c.version };
     });
-    res.json({ ok: true });
+    res.json({ ok: true, ...updated });
   }),
 );
 app.delete(
@@ -1300,6 +1387,43 @@ app.delete(
   }),
 );
 app.use("/api/admin", requireAdmin);
+const logoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024, files: 1, fields: 2, fieldSize: 512 },
+});
+app.get(
+  "/api/admin/branding",
+  api(async (req, res) => {
+    res.json(publicBranding(await readBranding()));
+  }),
+);
+app.put(
+  "/api/admin/branding",
+  (req, res, next) => {
+    logoUpload.single("logo")(req, res, (error) => {
+      if (error?.code === "LIMIT_FILE_SIZE")
+        return next(
+          Object.assign(new Error("Das Logo darf maximal 2 MB groß sein."), {
+            status: 400,
+          }),
+        );
+      next(error);
+    });
+  },
+  api(async (req, res) => {
+    const input = z
+      .object({
+        name: z.string().trim().min(1).max(60),
+        removeLogo: z
+          .union([z.boolean(), z.enum(["true", "false"])])
+          .default(false)
+          .transform((value) => value === true || value === "true"),
+      })
+      .strict()
+      .parse(req.body);
+    res.json(await saveBranding(input, req.file));
+  }),
+);
 app.get(
   "/api/admin/users",
   api(async (req, res) =>
@@ -1524,34 +1648,31 @@ app.use(express.static(dist, { index: false, maxAge: "1h" }));
 app.get("/{*path}", (req, res) => res.sendFile(path.join(dist, "index.html")));
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError)
-    return res
-      .status(400)
-      .json({
-        error:
-          err.code === "LIMIT_FILE_SIZE"
-            ? "Die Datei darf maximal 20 MB groß sein."
-            : "Der Upload konnte nicht verarbeitet werden.",
-      });
+    return res.status(400).json({
+      error:
+        err.code === "LIMIT_FILE_SIZE"
+          ? translateForRequest(req, "Die Datei darf maximal 20 MB groß sein.")
+          : translateForRequest(req, "Der Upload konnte nicht verarbeitet werden."),
+    });
   if (err instanceof z.ZodError)
-    return res
-      .status(400)
-      .json({
-        error: err.issues
-          .map((i) => `${i.path.join(".")}: ${i.message}`)
-          .join("; "),
-      });
+    return res.status(400).json({
+      error: err.issues
+        .map((i) => `${i.path.join(".")}: ${translateForRequest(req, i.message)}`)
+        .join("; "),
+    });
   if (err instanceof UniqueConstraintError)
-    return res.status(409).json({ error: "Dieser Eintrag existiert bereits." });
+    return res.status(409).json({ error: translateForRequest(req, "Dieser Eintrag existiert bereits.") });
   const status = err.status || (err.type === "entity.parse.failed" ? 400 : 500);
   if (status >= 500) console.error("Request failed:", err.name, err.message);
-  res
-    .status(status)
-    .json({
-      error:
-        status >= 500
-          ? "Ein interner Fehler ist aufgetreten. Bitte erneut versuchen."
-          : err.message,
-    });
+  res.status(status).json({
+    error:
+      status >= 500
+        ? translateForRequest(
+            req,
+            "Ein interner Fehler ist aufgetreten. Bitte erneut versuchen.",
+          )
+        : translateForRequest(req, err.message),
+  });
 });
 await initializeDatabase();
 const cleanup = setInterval(

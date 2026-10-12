@@ -7,7 +7,8 @@ x-database-environment: &database-environment
 
 services:
   app:
-    build: .
+    image: ${APP_IMAGE:-ghcr.io/phillipunzen/project-planning-tool:latest}
+    pull_policy: always
     restart: unless-stopped
     ports:
       - "${APP_PORT:-8110}:3000"
