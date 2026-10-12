@@ -141,6 +141,95 @@ try {
   console.log(
     "PASS: Registrierung über weitergeleitete Vorschauadresse und Beispielboard",
   );
+  // Task actions are visible touch targets, and bucket titles save only when finished.
+  const firstBucket = page.locator(".kanban-column").first();
+  const taskAction = firstBucket.getByRole("button", { name: "Aufgabe in Offen erstellen", exact: true });
+  if ((await taskAction.boundingBox()).height < 48) throw new Error("Create task target is too small");
+  await taskAction.click();
+  await expect(page.locator("dialog.task-dialog")).toBeVisible();
+  if ((await page.locator("dialog").boundingBox()).width < 900) throw new Error("Task dialog is not enlarged on desktop");
+  await page.locator("dialog .modal-heading").getByRole("button", { name: "Schließen", exact: true }).click();
+  await firstBucket.getByRole("button", { name: "Aufgabe bearbeiten: Projektziele festlegen", exact: true }).click();
+  await expect(page.getByLabel("Titel", { exact: true })).toHaveValue("Projektziele festlegen");
+  await page.locator("dialog .modal-heading").getByRole("button", { name: "Schließen", exact: true }).click();
+  const renames = [];
+  const trackRenames = request => {
+    if (request.method() === "PATCH" && /\/api\/boards\/[^/]+$/.test(request.url())) renames.push(request);
+  };
+  page.on("request", trackRenames);
+  await firstBucket.getByRole("button", { name: "Offen", exact: true }).click();
+  await page.getByLabel("Bucket-Name", { exact: true }).fill("Noch nicht fertig");
+  await page.waitForTimeout(1100);
+  if (renames.length !== 0) throw new Error("Bucket title saved while typing");
+  await page.getByLabel("Bucket-Name", { exact: true }).press("Escape");
+  await expect(firstBucket.locator("h3")).toHaveText("Offen");
+  if (renames.length !== 0) throw new Error("Escape saved the cancelled bucket draft");
+  await firstBucket.getByRole("button", { name: "Offen", exact: true }).click();
+  await page.getByLabel("Bucket-Name", { exact: true }).fill("Planung");
+  await page.getByLabel("Bucket-Name", { exact: true }).press("Enter");
+  await expect(firstBucket.locator("h3")).toHaveText("Planung");
+  await page.reload();
+  await expect(firstBucket.locator("h3")).toHaveText("Planung");
+  await firstBucket.getByRole("button", { name: "Planung", exact: true }).click();
+  await page.getByLabel("Bucket-Name", { exact: true }).fill("Offen");
+  await page.getByLabel("Aufgaben suchen", { exact: true }).click();
+  await expect(firstBucket.locator("h3")).toHaveText("Offen");
+  await firstBucket.getByRole("button", { name: "Offen", exact: true }).click();
+  await page.getByLabel("Bucket-Name", { exact: true }).fill("   ");
+  await page.getByLabel("Aufgaben suchen", { exact: true }).click();
+  await expect(page.getByText("Bitte einen Bucket-Namen eingeben.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Umbenennen abbrechen", exact: true }).click();
+  await firstBucket.getByRole("button", { name: "Offen", exact: true }).click();
+  await page.getByLabel("Bucket-Name", { exact: true }).fill("Lokaler Namensentwurf");
+  const concurrentRename = await page.evaluate(async () => {
+    const projects = await fetch("/api/projects").then(r => r.json());
+    const id = projects.find(p => p.name === "Unser erstes Projekt").Boards[0].id;
+    const board = await fetch(`/api/boards/${id}`).then(r => r.json());
+    return (await fetch(`/api/boards/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ revision: board.revision, columns: board.columns.map((c, index) => index === 0 ? { ...c, name: "Teamüberschrift" } : c) })
+    })).status;
+  });
+  if (concurrentRename !== 200) throw new Error("Concurrent inline rename fixture failed");
+  await page.getByLabel("Bucket-Name", { exact: true }).press("Enter");
+  await expect(page.getByText(/Dieser Bucket wurde inzwischen umbenannt/)).toBeVisible();
+  await expect(page.getByLabel("Bucket-Name", { exact: true })).toHaveValue("Lokaler Namensentwurf");
+  await page.getByRole("button", { name: "Umbenennen abbrechen", exact: true }).click();
+  await expect(firstBucket.locator("h3")).toHaveText("Teamüberschrift");
+  await firstBucket.getByRole("button", { name: "Teamüberschrift", exact: true }).click();
+  await page.getByLabel("Bucket-Name", { exact: true }).fill("Offen");
+  await page.getByLabel("Bucket-Name", { exact: true }).press("Enter");
+  await expect(firstBucket.locator("h3")).toHaveText("Offen");
+  await expect(page.locator(".task-card")).toHaveCount(6);
+  const preserveChanges = await page.evaluate(async () => {
+    const projects = await fetch("/api/projects").then(r => r.json());
+    const id = projects.find(p => p.name === "Unser erstes Projekt").Boards[0].id;
+    return fetch(`/api/boards/${id}`).then(r => r.json());
+  });
+  await firstBucket.getByRole("button", { name: "Offen", exact: true }).click();
+  await page.getByLabel("Bucket-Name", { exact: true }).fill("Wiederholung");
+  await page.route("**/api/boards/*", async route => {
+    if (route.request().method() === "PATCH") await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Test: gerade nicht erreichbar" }) });
+    else await route.continue();
+  });
+  await page.getByLabel("Bucket-Name", { exact: true }).press("Enter");
+  await expect(page.getByText("Test: gerade nicht erreichbar", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Bucket-Name", { exact: true })).toHaveValue("Wiederholung");
+  await page.unroute("**/api/boards/*");
+  await page.getByRole("button", { name: "Bucket-Namen speichern", exact: true }).click();
+  await expect(firstBucket.locator("h3")).toHaveText("Wiederholung");
+  const afterRename = await page.evaluate(async id => fetch(`/api/boards/${id}`).then(r => r.json()), preserveChanges.id);
+  for (let i = 0; i < afterRename.columns.length; i++) {
+    const before = preserveChanges.columns[i], after = afterRename.columns[i];
+    if (before.id !== after.id || before.color !== after.color || before.isDone !== after.isDone) throw new Error("Inline rename changed bucket identity, ordering, color or completion state");
+  }
+  if (JSON.stringify(afterRename.cards) !== JSON.stringify(preserveChanges.cards)) throw new Error("Inline rename changed task data");
+  await firstBucket.getByRole("button", { name: "Wiederholung", exact: true }).click();
+  await page.getByLabel("Bucket-Name", { exact: true }).fill("Offen");
+  await page.getByLabel("Bucket-Name", { exact: true }).press("Enter");
+  await expect(firstBucket.locator("h3")).toHaveText("Offen");
+  page.off("request", trackRenames);
+  await page.screenshot({ path: "artifacts/task-actions-desktop.png", fullPage: true });
+  console.log("PASS: Große Aufgabenaktionen und Dialoge; Bucket-Namen per Klick, Enter/Blur, Escape, Validierung, Persistenz und geschützter Konfliktentwurf");
   // Drag between columns with the desktop mouse.
   const firstCard = page.locator(".task-card").filter({
     has: page.getByRole("button", {
@@ -569,6 +658,25 @@ try {
   await mobile.reload();
   await expectTheme(mobile, "dark");
   await mobile.screenshot({ path: "artifacts/board-dark-mobile.png", fullPage: true });
+  const mobileBucket = mobile.locator(".kanban-column").first();
+  const mobileOriginal = await mobileBucket.locator("h3").innerText();
+  await mobileBucket.locator(".column-name").tap();
+  await mobile.getByLabel("Bucket-Name", { exact: true }).fill("Mobile Planung");
+  await mobile.getByRole("button", { name: "Bucket-Namen speichern", exact: true }).tap();
+  await expect(mobileBucket.locator("h3")).toHaveText("Mobile Planung");
+  await mobile.reload();
+  await expect(mobileBucket.locator("h3")).toHaveText("Mobile Planung");
+  await mobileBucket.locator(".column-name").tap();
+  await mobile.getByLabel("Bucket-Name", { exact: true }).fill(mobileOriginal);
+  await mobile.getByRole("button", { name: "Bucket-Namen speichern", exact: true }).tap();
+  await expect(mobileBucket.locator("h3")).toHaveText(mobileOriginal);
+  await mobileBucket.locator(".column-add").tap();
+  await expect(mobile.locator("dialog.task-dialog")).toBeVisible();
+  const taskOverflow = await mobile.locator("dialog").evaluate(el => el.scrollWidth > el.clientWidth);
+  if (taskOverflow) throw new Error("Enlarged task dialog overflows on mobile");
+  await mobile.screenshot({ path: "artifacts/task-dialog-mobile.png", fullPage: true });
+  await mobile.locator("dialog .modal-heading").getByRole("button", { name: "Schließen", exact: true }).tap();
+  console.log("PASS: Bucket direkt per Touch umbenannt und große Aufgabeneingabe ohne Überlauf auf dem Handy");
   // Bucket editing must work with touch and keep completion independent of order.
   const doneSummary = await mobile
     .getByText(/von 7 Aufgaben erledigt/)

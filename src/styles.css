@@ -3263,3 +3263,70 @@ fieldset:disabled {
 .icon-picker {
   flex-wrap: wrap;
 }
+
+/* Prominent task actions and direct bucket naming. */
+.toolbar-right .primary {
+  min-height: 48px;
+  height: auto;
+  font-size: 14px;
+  padding: 12px 18px;
+}
+.column-heading > div { width: 100%; }
+.column-heading h3 { flex: 1; min-width: 0; font-size: 14px; }
+.column-name {
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 4px;
+  gap: 8px;
+  justify-content: space-between;
+  color: var(--text-strong, #32384c);
+  font: inherit;
+  text-align: left;
+  border-radius: 7px;
+}
+.column-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.column-name svg { flex-shrink: 0; color: var(--text-muted, #8f96a8); }
+.column-name:hover { background: var(--surface, #fff); color: var(--primary); }
+.column-add {
+  justify-content: center;
+  min-height: 60px;
+  margin: 0 0 14px;
+  padding: 14px 10px;
+  border: 1px dashed var(--primary);
+  border-radius: 9px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 650;
+  gap: 10px;
+}
+.column-add:hover { background: var(--surface, #fff); }
+.card-edit {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 12px;
+  gap: 8px;
+  border: 1px solid var(--border-neutral, #e0e4ee);
+  border-radius: 7px;
+  background: var(--surface-soft, #f0f2f7);
+  color: var(--text-strong, #32384c);
+  font-size: 13px;
+  font-weight: 600;
+}
+.card-edit:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+.column-rename { margin: 0 3px 14px; }
+.column-rename input { width: 100%; min-width: 0; min-height: 44px; font-size: 14px; }
+.column-rename-actions { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+.column-rename-actions > span { flex: 1; font-size: 10px; color: var(--text-muted, #8f96a8); }
+.column-rename-actions .icon-button { width: 44px; height: 44px; flex-shrink: 0; }
+.column-rename .form-error { font-size: 12px; overflow-wrap: anywhere; }
+.modal.wide.task-dialog { width: 960px; max-width: min(960px, calc(100vw - 32px)); padding: 32px; }
+.task-dialog .modal-heading h2 { font-size: 25px; }
+.task-dialog label { font-size: 14px; }
+.task-dialog input:not([type="checkbox"]):not([type="file"]), .task-dialog select { min-height: 46px; font-size: 14px; }
+.task-dialog textarea { min-height: 140px; font-size: 14px; }
+.column-name:focus-visible, .column-add:focus-visible, .card-edit:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+@media (max-width: 850px) {
+  .modal.wide.task-dialog { width: 100%; max-width: calc(100vw - 20px); padding: 22px 18px; }
+  .task-dialog .modal-heading h2 { font-size: 22px; }
+}

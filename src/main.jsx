@@ -74,6 +74,7 @@ import {
   BookOpen,
   Lightbulb,
   Download,
+  Pencil,
 } from "lucide-react";
 import "./styles.css";
 import { ThemeProvider, ThemeControl } from "./theme.jsx";
@@ -243,7 +244,14 @@ function Empty({ icon: Icon = Inbox, title, children }) {
     </div>
   );
 }
-function Modal({ title, subtitle, onClose, children, wide = false }) {
+function Modal({
+  title,
+  subtitle,
+  onClose,
+  children,
+  wide = false,
+  className = "",
+}) {
   const ref = useRef();
   useEffect(() => {
     const dialog = ref.current;
@@ -253,7 +261,7 @@ function Modal({ title, subtitle, onClose, children, wide = false }) {
   return (
     <dialog
       ref={ref}
-      className={`modal ${wide ? "wide" : ""}`}
+      className={`modal ${wide ? "wide" : ""} ${className}`}
       onCancel={(e) => {
         e.preventDefault();
         onClose();
@@ -509,6 +517,31 @@ function App() {
         }),
       t("Aufgabe verschoben"),
     );
+  }
+  async function renameColumn(id, nextName, originalName) {
+    if (!board || !canEdit)
+      throw new Error(t("Du hast keine Berechtigung für diese Aktion."));
+    const latest = await api(`/boards/${board.id}`);
+    const column = latest.columns.find((candidate) => candidate.id === id);
+    if (!column) throw new Error(t("Dieser Bucket wurde inzwischen entfernt."));
+    if (column.name !== originalName) {
+      await refreshBoard();
+      throw new Error(
+        t(
+          "Dieser Bucket wurde inzwischen umbenannt. Dein Entwurf bleibt erhalten. Bitte abbrechen und den aktuellen Namen prüfen.",
+        ),
+      );
+    }
+    await api(`/boards/${board.id}`, {
+      method: "PATCH",
+      body: {
+        revision: latest.revision,
+        columns: latest.columns.map((candidate) =>
+          candidate.id === id ? { ...candidate, name: nextName } : candidate,
+        ),
+      },
+    });
+    await refreshBoard();
   }
   if (loading)
     return (
@@ -982,6 +1015,7 @@ function App() {
                   onMove={move}
                   onOpen={(c) => setModal({ type: "card", card: c })}
                   onAdd={(col) => setModal({ type: "card", columnId: col })}
+                  onRename={renameColumn}
                 />
               )}
               <div className="board-footer">
@@ -1258,7 +1292,9 @@ function AuthScreen({
 }) {
   const brand = useBranding();
   const [error, setError] = useState(
-      initialError || new URLSearchParams(location.search).get("authError") || "",
+      initialError ||
+        new URLSearchParams(location.search).get("authError") ||
+        "",
     ),
     [busy, setBusy] = useState(false),
     [method, setMethod] = useState(info.provider === "ldap" ? "ldap" : "local");
@@ -1639,6 +1675,7 @@ function TaskCard({
   dragProps,
   style,
   dragging = false,
+  actionLabel,
 }) {
   const p = priorities[card.priority],
     done = card.checklist?.filter((i) => i.done).length || 0,
@@ -1735,6 +1772,16 @@ function TaskCard({
           </span>
         )}
       </div>
+      {onOpen && actionLabel && (
+        <button
+          className="card-edit"
+          onClick={() => onOpen(card)}
+          aria-label={`${actionLabel}: ${card.title}`}
+        >
+          <Pencil size={17} />
+          {actionLabel}
+        </button>
+      )}
     </article>
   );
 }
@@ -1752,6 +1799,7 @@ function SortableCard({ card, onOpen, canEdit }) {
     <TaskCard
       card={card}
       onOpen={onOpen}
+      actionLabel={canEdit ? t("Aufgabe bearbeiten") : t("Details ansehen")}
       dragging={isDragging}
       style={{
         transform: CSS.Transform.toString(transform),
@@ -1775,29 +1823,154 @@ function SortableCard({ card, onOpen, canEdit }) {
     />
   );
 }
-function Column({ column, cards, onOpen, onAdd, canEdit }) {
+function Column({ column, cards, onOpen, onAdd, onRename, canEdit }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  const [editing, setEditing] = useState(false),
+    [draft, setDraft] = useState(column.name),
+    [saving, setSaving] = useState(false),
+    [error, setError] = useState("");
+  const originalName = useRef(column.name),
+    savingRef = useRef(false),
+    renameActive = useRef(false),
+    titleRef = useRef();
+  function startRename() {
+    renameActive.current = true;
+    originalName.current = column.name;
+    setDraft(column.name);
+    setError("");
+    setEditing(true);
+  }
+  function cancelRename() {
+    if (savingRef.current) return;
+    renameActive.current = false;
+    setError("");
+    setEditing(false);
+    requestAnimationFrame(() => titleRef.current?.focus());
+  }
+  async function saveRename() {
+    if (savingRef.current || !renameActive.current) return;
+    const nextName = draft.trim();
+    if (!nextName) {
+      setError(t("Bitte einen Bucket-Namen eingeben."));
+      return;
+    }
+    if (nextName === originalName.current) {
+      renameActive.current = false;
+      setEditing(false);
+      return;
+    }
+    savingRef.current = true;
+    setSaving(true);
+    setError("");
+    try {
+      await onRename(column.id, nextName, originalName.current);
+      renameActive.current = false;
+      setEditing(false);
+    } catch (e) {
+      setError(
+        e.status === 409
+          ? t(
+              "Das Board wurde inzwischen geändert. Dein Entwurf bleibt erhalten. Bitte versuche es erneut.",
+            )
+          : e.message,
+      );
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }
   return (
     <section
       ref={setNodeRef}
       className={`kanban-column ${isOver ? "drop-target" : ""}`}
     >
-      <div className="column-heading">
-        <div>
-          <span className="column-dot" style={{ background: column.color }} />
-          <h3>{column.name}</h3>
-          <span className="column-count">{cards.length}</span>
+      {editing ? (
+        <form
+          className="column-rename"
+          onSubmit={(e) => {
+            e.preventDefault();
+            saveRename();
+          }}
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) saveRename();
+          }}
+        >
+          <input
+            aria-label={t("Bucket-Name")}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                cancelRename();
+              }
+            }}
+            onFocus={(e) => e.target.select()}
+            autoFocus
+            required
+            maxLength={100}
+            disabled={saving}
+            aria-invalid={Boolean(error)}
+          />
+          <div className="column-rename-actions">
+            <span>
+              {saving
+                ? t("Wird gespeichert …")
+                : t("Enter speichert · Escape bricht ab")}
+            </span>
+            <button
+              type="submit"
+              className="icon-button"
+              disabled={saving}
+              aria-label={t("Bucket-Namen speichern")}
+            >
+              <Check size={18} />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              disabled={saving}
+              onClick={cancelRename}
+              aria-label={t("Umbenennen abbrechen")}
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <FormError error={error} />
+        </form>
+      ) : (
+        <div className="column-heading">
+          <div>
+            <span className="column-dot" style={{ background: column.color }} />
+            <h3>
+              {canEdit ? (
+                <button
+                  ref={titleRef}
+                  className="column-name"
+                  onClick={startRename}
+                  title={t("Bucket {0} umbenennen", [column.name])}
+                >
+                  <span>{column.name}</span>
+                  <Pencil size={14} />
+                </button>
+              ) : (
+                column.name
+              )}
+            </h3>
+            <span className="column-count">{cards.length}</span>
+          </div>
         </div>
-        {canEdit && (
-          <button
-            className="icon-button"
-            aria-label={t("Aufgabe in {0} erstellen", [column.name])}
-            onClick={() => onAdd(column.id)}
-          >
-            <Plus size={17} />
-          </button>
-        )}
-      </div>
+      )}
+      {canEdit && (
+        <button
+          className="column-add"
+          aria-label={t("Aufgabe in {0} erstellen", [column.name])}
+          onClick={() => onAdd(column.id)}
+        >
+          <Plus size={24} />
+          {t("Aufgabe hinzufügen")}
+        </button>
+      )}
       <SortableContext
         items={cards.map((c) => c.id)}
         strategy={verticalListSortingStrategy}
@@ -1818,16 +1991,10 @@ function Column({ column, cards, onOpen, onAdd, canEdit }) {
           )}
         </div>
       </SortableContext>
-      {canEdit && (
-        <button className="column-add" onClick={() => onAdd(column.id)}>
-          <Plus size={15} />
-          {t("Aufgabe hinzufügen")}
-        </button>
-      )}
     </section>
   );
 }
-function Kanban({ board, cards, canEdit, onMove, onOpen, onAdd }) {
+function Kanban({ board, cards, canEdit, onMove, onOpen, onAdd, onRename }) {
   const [active, setActive] = useState(null);
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
@@ -1894,6 +2061,7 @@ function Kanban({ board, cards, canEdit, onMove, onOpen, onAdd }) {
             canEdit={canEdit}
             onOpen={onOpen}
             onAdd={onAdd}
+            onRename={onRename}
           />
         ))}
       </div>
@@ -2812,6 +2980,7 @@ function CardModal({
   return (
     <Modal
       wide
+      className="task-dialog"
       title={card ? t("Aufgabendetails") : t("Der nächste Schritt.")}
       subtitle={
         card

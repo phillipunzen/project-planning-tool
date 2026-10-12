@@ -445,5 +445,16 @@
   "Für die Installation bitte die HTTPS-Adresse der Anwendung öffnen.": "To install the app, open its HTTPS address.",
   "Im Browsermenü „App installieren“ oder „Zum Startbildschirm hinzufügen“ wählen.": "Choose “Install app” or “Add to home screen” in the browser menu.",
   "In Safari das Teilen-Menü öffnen und „Zum Home-Bildschirm“ wählen.": "In Safari, open the Share menu and choose “Add to Home Screen”.",
-  "Für Projekte und Änderungen wird weiterhin eine Internetverbindung benötigt.": "Projects and changes still require an internet connection."
+  "Für Projekte und Änderungen wird weiterhin eine Internetverbindung benötigt.": "Projects and changes still require an internet connection.",
+  "Aufgabe bearbeiten": "Edit task",
+  "Details ansehen": "View details",
+  "Bucket {0} umbenennen": "Rename bucket {0}",
+  "Bucket-Name": "Bucket name",
+  "Bucket-Namen speichern": "Save bucket name",
+  "Umbenennen abbrechen": "Cancel renaming",
+  "Enter speichert · Escape bricht ab": "Enter saves · Escape cancels",
+  "Bitte einen Bucket-Namen eingeben.": "Please enter a bucket name.",
+  "Dieser Bucket wurde inzwischen entfernt.": "This bucket has been removed.",
+  "Dieser Bucket wurde inzwischen umbenannt. Dein Entwurf bleibt erhalten. Bitte abbrechen und den aktuellen Namen prüfen.": "This bucket has been renamed by someone else. Your draft is preserved. Please cancel and check the current name.",
+  "Das Board wurde inzwischen geändert. Dein Entwurf bleibt erhalten. Bitte versuche es erneut.": "The board has changed. Your draft is preserved. Please try again."
 }

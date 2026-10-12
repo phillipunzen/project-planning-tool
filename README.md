@@ -6,6 +6,8 @@ Repository: [phillipunzen/project-planning-tool](https://github.com/phillipunzen
 
 ## Funktionen
 
+- Große Schaltflächen zum Anlegen neuer Aufgaben direkt oben in jedem Bucket, sichtbare Bearbeiten-Aktion auf den Karten und ein größerer Aufgabendialog. Bucket-Überschriften per Klick umbenennen; Enter oder Verlassen des Felds speichert, Escape bricht ab. Fehler behalten den Entwurf, gleichzeitig geänderte Namen werden nicht überschrieben.
+
 - Eigener Name und eigenes Logo unter „Administration → Allgemein“. Nur Administratoren dürfen die Einstellungen ändern. Name (1–60 Zeichen) und Logo gelten auf Anmeldung und Arbeitsbereich; das Logo dient auch als Browser-Symbol. PNG, JPG und WebP bis 2 MB und 4096 × 4096 Pixel, mit Vorschau und Entfernen-Funktion. Der Name liegt in MariaDB, das Logo im persistenten Upload-Volume; beide werden von der bestehenden Sicherung erfasst.
 
 - Deutsch und Englisch: standardmäßig die erste unterstützte Browsersprache (sonst Englisch). Unter „Profileinstellungen → Sprache“ Deutsch, English oder Automatisch festlegen; die Wahl wird im Benutzerprofil in MariaDB für alle Geräte gespeichert. Eigene Projekt-, Bucket- und Karteninhalte werden nicht übersetzt. Neue Standard-Buckets und Beispielprojekte werden in der aktuellen Sprache angelegt.
