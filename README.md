@@ -25,7 +25,7 @@ Repository: [phillipunzen/project-planning-tool](https://github.com/phillipunzen
 - Administration für lokale Konten, Microsoft Active Directory über LDAPS/StartTLS oder OpenID Connect (z. B. Microsoft Entra ID, Keycloak).
 - Gemeinsame MariaDB-Daten, Synchronisierung alle 5 Sekunden und Konflikterkennung bei gleichzeitigen Kartenänderungen.
 
-## Fertiges Docker-Image aus GitHub Container Registry
+## Fertiges Docker-Image aus GitHub Container Registry (Standard)
 
 Der Workflow `.github/workflows/docker-image.yml` baut Images für **linux/amd64 und linux/arm64** und veröffentlicht sie als Package dieses Repositorys unter `ghcr.io/phillipunzen/project-planning-tool`.
 
@@ -37,25 +37,25 @@ Der Workflow `.github/workflows/docker-image.yml` baut Images für **linux/amd64
 
 In Pull Requests wird nur gebaut; es werden keine Images veröffentlicht. Pushes auf `main` und `feature/card-progress`, Versionstags und manuell gestartete Läufe veröffentlichen Images. Die Anmeldung erfolgt mit dem kurzlebigen `GITHUB_TOKEN` des Workflows und `packages: write`; ein separat gespeichertes Registry-Passwort ist nicht erforderlich.
 
-Für den Betrieb **ohne lokalen Build** die `.env` wie unten mit der externen MariaDB und dem Sitzungsschlüssel einrichten, dann:
+Die `docker-compose.yml` verwendet standardmäßig **`ghcr.io/phillipunzen/project-planning-tool:latest`**. Die `.env` wie unten mit der externen MariaDB und dem Sitzungsschlüssel einrichten, dann:
 
 ```bash
 # Optional: auf eine bestimmte Version oder einen Digest festlegen.
 # APP_IMAGE=ghcr.io/phillipunzen/project-planning-tool@sha256:... in .env
 
-docker compose -f docker-compose.yml -f docker-compose.image.yml pull app
-docker compose -f docker-compose.yml -f docker-compose.image.yml up -d --wait
+docker compose pull app
+docker compose up -d --wait
 ```
 
-Das Override `docker-compose.image.yml` entfernt die lokale Build-Konfiguration und verwendet `APP_IMAGE` (Standard: `ghcr.io/phillipunzen/project-planning-tool:latest`). Alle fünf MariaDB-ENV-Variablen und das Upload-Volume bleiben erhalten. Dafür ist Docker Compose >=2.24.4 erforderlich (`!reset`). Für den optionalen lokalen DB-Container `-f docker-compose.local.yml` vor dem Image-Override ergänzen.
+`APP_IMAGE` überschreibt das Image, etwa mit einem SHA-Tag oder Digest für eine feste Version. `pull_policy: always` prüft beim Start auf das aktuelle Image. Alle fünf MariaDB-ENV-Variablen und das Upload-Volume bleiben erhalten. Für den optionalen lokalen DB-Container zusätzlich `docker-compose.local.yml` verwenden. Das frühere Override `docker-compose.image.yml` bleibt kompatibel, ist für den normalen Betrieb aber nicht mehr nötig.
 
 Falls das Package privat ist, vorher mit einem GitHub-Konto mit Package-Zugriff anmelden (`docker login ghcr.io -u phillipunzen`, als Passwort ein Token mit `read:packages`). Für anonyme Downloads muss der Eigentümer in den Package-Einstellungen die Sichtbarkeit auf **Public** stellen. Ein öffentliches Quellcode-Repository macht neue GHCR-Packages nicht automatisch öffentlich.
 
-Zum dauerhaften Auswählen des Image-Modus `COMPOSE_FILE=docker-compose.yml:docker-compose.image.yml` in `.env` setzen; anschließend funktionieren auch die normalen Betriebs- und Sicherungsbefehle. Die Image-Veröffentlichung enthält weder `.env`, Benutzerdateien noch Datenbankinhalte.
+Der Image-Modus ist bereits der Standard und benötigt keine zusätzliche `COMPOSE_FILE`-Einstellung. Vorhandene Konfigurationen mit `docker-compose.image.yml` funktionieren weiter. Die Image-Veröffentlichung enthält weder `.env`, Benutzerdateien noch Datenbankinhalte.
 
 ## Docker mit externer MariaDB (Standard)
 
-Voraussetzungen: Docker Engine mit Compose, eine erreichbare MariaDB sowie Node.js >=20 für das einmalige Erzeugen der Konfiguration. Der App-Container verwendet Node.js 22. Die `docker-compose.yml` startet standardmäßig die Anwendung; sie enthält keinen Datenbankserver und keine Abhängigkeit von einem lokalen DB-Container.
+Voraussetzungen: Docker Engine mit Compose, eine erreichbare MariaDB sowie Node.js >=20 für das einmalige Erzeugen der Konfiguration. Der App-Container verwendet Node.js 22. Die `docker-compose.yml` startet standardmäßig die Anwendung aus dem GHCR-Image; sie enthält keinen Datenbankserver und keine Abhängigkeit von einem lokalen DB-Container.
 
 ```bash
 git clone https://github.com/phillipunzen/project-planning-tool.git
@@ -88,7 +88,7 @@ Der `SESSION_SECRET` wird vom Skript zufällig erzeugt. Die Datenbank und das Ko
 `localhost` und `127.0.0.1` bezeichnen innerhalb eines Containers den Container selbst. Läuft MariaDB auf dem Docker-Host, `DATABASE_HOST=host.docker.internal` verwenden; diese Zuordnung ist für Linux im Compose enthalten. Der MariaDB-Server muss TCP-Verbindungen vom App-Container zulassen.
 
 ```bash
-docker compose -f docker-compose.yml up -d --build
+docker compose -f docker-compose.yml up -d --wait
 ```
 
 Die Anwendung ist standardmäßig unter **http://localhost:8110** erreichbar. Auf der ersten Seite das Administratorkonto einrichten; es gibt keine voreingestellten Zugangsdaten. Das Beispielprojekt ist optional. Die Erstkonfiguration vor einer Freigabe an weitere Benutzer abschließen.
@@ -101,7 +101,7 @@ Für einen Betrieb ohne vorhandene Datenbank zusätzlich `docker-compose.local.y
 
 ```bash
 node scripts/init-env.mjs
-docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --wait
 ```
 
 Die zusätzliche Datei setzt den DB-Host der Anwendung auf `mariadb`, startet MariaDB 11.4 und wartet auf deren Healthcheck. Datenbankname, Benutzer und Passwort kommen weiterhin aus denselben ENV-Variablen; `DATABASE_ROOT_PASSWORD` wird nur in diesem Modus benötigt und ebenfalls vom Skript erzeugt. Die Datenbank wird nicht am Host veröffentlicht.
@@ -181,7 +181,8 @@ Anhänge bleiben im Compose-Volume `uploads`. Bei externer MariaDB liegen Projek
 ```bash
 docker compose ps
 docker compose logs --tail=100 app
-docker compose up -d --build     # nach Codeänderungen
+docker compose pull app         # veröffentlichtes Image aktualisieren
+docker compose up -d --wait     # Update starten
 docker compose stop             # anhalten; Daten bleiben erhalten
 ```
 
@@ -196,6 +197,14 @@ Die erste Schema-Version erstellt fehlende Tabellen additiv; ein vorhandenes `Ca
 Für die Wiederherstellung zunächst die zum Backup gehörende `.env` wiederherstellen und den Dump in die bereitgestellte MariaDB importieren. Bei externer MariaDB die Sicherungs- und Wiederherstellungsabläufe mit deren Betreiber abstimmen; bei lokaler MariaDB zunächst den optionalen Container starten. Die Anhänge in ein temporär leeres Upload-Volume entpacken und dem Containerbenutzer UID 1000 zuordnen. Danach die App starten. Nie eine Wiederherstellung direkt über eine laufende Installation ausführen.
 
 ## Entwicklung und Tests
+
+Für einen eigenen Docker-Build das explizite Override verwenden:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build --wait
+```
+
+Es baut aus dem lokalen Quellcode und verwendet das lokale Image `projektwerk:local`. Bei lokaler MariaDB `-f docker-compose.local.yml` vor dem Build-Override ergänzen. Zum dauerhaften lokalen Build die entsprechende Dateiliste in `COMPOSE_FILE` hinterlegen, z. B. `docker-compose.yml:docker-compose.local.yml:docker-compose.build.yml`. Zum veröffentlichten Image durch Entfernen des Build-Overrides zurückwechseln.
 
 ```bash
 npm ci

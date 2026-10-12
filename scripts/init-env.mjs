@@ -7,7 +7,7 @@ if (existsSync(".env")) {
 const secret = () => randomBytes(32).toString("hex");
 writeFileSync(
   ".env",
-  `APP_URL=http://localhost:8110\nALLOWED_ORIGINS=\nAPP_PORT=8110\nPORT=8111\nDATABASE_HOST=db.example.internal\nDATABASE_PORT=3306\nDATABASE_NAME=projektwerk\nDATABASE_USER=projektwerk\nDATABASE_PASSWORD=${secret()}\nDATABASE_ROOT_PASSWORD=${secret()}\nSESSION_SECRET=${secret()}\nTRUST_PROXY=0\n`,
+  `APP_URL=http://localhost:8110\nALLOWED_ORIGINS=\nAPP_PORT=8110\nAPP_IMAGE=ghcr.io/phillipunzen/project-planning-tool:latest\nPORT=8111\nDATABASE_HOST=db.example.internal\nDATABASE_PORT=3306\nDATABASE_NAME=projektwerk\nDATABASE_USER=projektwerk\nDATABASE_PASSWORD=${secret()}\nDATABASE_ROOT_PASSWORD=${secret()}\nSESSION_SECRET=${secret()}\nTRUST_PROXY=0\n`,
   { mode: 0o600 },
 );
 console.log(

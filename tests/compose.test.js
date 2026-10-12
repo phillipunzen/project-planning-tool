@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 const fixture = {
   ...process.env,
   COMPOSE_FILE: "docker-compose.yml",
+  APP_IMAGE: "",
   DATABASE_HOST: "db.test.example",
   DATABASE_PORT: "3344",
   DATABASE_NAME: "external_project_test",
@@ -13,7 +14,7 @@ const fixture = {
   SESSION_SECRET: "fixture-session-secret-not-a-real-secret",
   APP_URL: "http://localhost:8110",
 };
-function config(files, backup = false) {
+function config(files, backup = false, overrides = {}) {
   return JSON.parse(
     execFileSync(
       "docker",
@@ -27,13 +28,16 @@ function config(files, backup = false) {
         "--format",
         "json",
       ],
-      { encoding: "utf8", env: fixture },
+      { encoding: "utf8", env: { ...fixture, ...overrides } },
     ),
   );
 }
 await test("default compose uses external database settings without a database server", () => {
   const c = config(["docker-compose.yml"]);
   const app = c.services.app;
+  assert.equal(app.image, "ghcr.io/phillipunzen/project-planning-tool:latest");
+  assert.equal(app.build, undefined);
+  assert.equal(app.pull_policy, "always");
   for (const name of [
     "DATABASE_HOST",
     "DATABASE_PORT",
@@ -84,7 +88,7 @@ await test("optional local database uses the same schema and account and a priva
   assert.equal(dev.services.mariadb.ports[0].host_ip, "127.0.0.1");
   assert.equal(dev.services.mariadb.ports[0].published, "3317");
 });
-await test("published image mode retains external DB settings and removes the local build", () => {
+await test("legacy image override remains compatible with the image default and external DB", () => {
   const c = config(["docker-compose.yml", "docker-compose.image.yml"]);
   assert.equal(c.services.app.build, undefined);
   assert.equal(c.services.app.image, "ghcr.io/phillipunzen/project-planning-tool:latest");
@@ -95,4 +99,22 @@ await test("published image mode retains external DB settings and removes the lo
   const local = config(["docker-compose.yml", "docker-compose.local.yml", "docker-compose.image.yml"]);
   assert.equal(local.services.app.build, undefined);
   assert.equal(local.services.app.environment.DATABASE_HOST, "mariadb");
+});
+
+await test("APP_IMAGE pins a release and local builds require an explicit override", () => {
+  const pinned = "ghcr.io/phillipunzen/project-planning-tool:sha-59fb2206c3863aa42f2f67c52a0a6d8c9987c0b7";
+  const c = config(["docker-compose.yml"], false, { APP_IMAGE: pinned });
+  assert.equal(c.services.app.image, pinned);
+  assert.equal(c.services.app.build, undefined);
+  const built = config(["docker-compose.yml", "docker-compose.build.yml"], false, { APP_IMAGE: pinned });
+  assert.equal(built.services.app.image, "projektwerk:local");
+  assert.equal(built.services.app.pull_policy, "build");
+  assert.equal(built.services.app.build.context, process.cwd());
+  assert.equal(built.services.mariadb, undefined);
+  assert.equal(built.services.app.environment.DATABASE_HOST, fixture.DATABASE_HOST);
+  const local = config(["docker-compose.yml", "docker-compose.local.yml", "docker-compose.build.yml"]);
+  assert.equal(local.services.app.image, "projektwerk:local");
+  assert.equal(local.services.app.pull_policy, "build");
+  assert.equal(local.services.app.environment.DATABASE_HOST, "mariadb");
+  assert.equal(local.services.app.depends_on.mariadb.condition, "service_healthy");
 });

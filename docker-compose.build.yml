@@ -1,0 +1,6 @@
+# Optional local build. Combine with docker-compose.yml and, if needed, the local DB override.
+services:
+  app:
+    image: projektwerk:local
+    build: .
+    pull_policy: build
