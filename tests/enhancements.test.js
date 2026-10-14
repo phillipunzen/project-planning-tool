@@ -506,7 +506,11 @@ try {
               order: [["id", "ASC"]],
             })
           ).map((entry) => entry.toJSON()),
-          before,
+          before.map((entry) => ({
+            ...entry,
+            templateId:
+              entry.templateId === template.id ? null : entry.templateId,
+          })),
         );
         const cleared = await admin.call(
           `/boards/${board.id}/default-template`,

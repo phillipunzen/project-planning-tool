@@ -3415,3 +3415,12 @@ fieldset:disabled {
   .task-dialog .modal-header-container { top: -18px; }
   .task-dialog .modal-header-container .detail-tabs { position: static; margin-bottom: 12px; }
 }
+
+.custom-fields-editor,.custom-task-fields{margin:24px 0;padding-top:18px;border-top:1px solid var(--border)}
+.custom-fields-editor h3,.custom-task-fields h3{font-size:15px;margin-bottom:12px}
+.custom-field-definition{padding:16px;margin:14px 0;border:1px solid var(--border);border-radius:12px}
+.custom-field-options{display:grid;gap:8px;margin-bottom:12px}
+.custom-option-row{display:flex;align-items:center;gap:8px}
+.custom-option-row input{min-width:0;flex:1}
+.custom-option-row .icon-button{flex-shrink:0}
+@media(max-width:600px){.custom-field-definition{padding:12px}.custom-field-definition .form-grid{grid-template-columns:1fr}.custom-field-options .button{min-height:44px}}

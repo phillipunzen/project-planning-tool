@@ -94,9 +94,13 @@ import { useBranding, setBranding } from "./branding.js";
 import { projectIcons } from "../shared/project-icons.js";
 import { CardAutosave } from "./card-autosave.js";
 import { usePwaInstalled, promptInstall } from "./pwa.js";
+import { CustomTaskFields } from "./custom-fields.jsx";
 import { TemplatesModal } from "./templates.jsx";
 import { InviteUserSearch } from "./invite-search.jsx";
-import { templateCardFields } from "../shared/task-templates.js";
+import {
+  templateCardFields,
+  resolveCustomFields,
+} from "../shared/task-templates.js";
 async function api(url, options = {}) {
   const response = await fetch(`/api${url}`, {
     credentials: "same-origin",
@@ -2926,15 +2930,22 @@ function CardModal({
     labels: c?.labels.join(", ") || "",
     checklist: c?.checklist?.map((i) => ({ ...i })) || [],
     version: c?.version ?? 0,
+    templateId: c?.templateId || null,
+    customValues: { ...(c?.customValues || {}) },
   });
-  const [templateId, setTemplateId] = useState(
-    card ? "" : board.defaultTemplateId || "",
-  );
+  const [recipes, setRecipes] = useState(board.templates || []);
+  const schemaSnapshot = useRef(card?.customFieldDefinitions || []);
+  const [schemaError, setSchemaError] = useState("");
   const standardTemplate = (board.templates || []).find(
     (entry) => entry.id === board.defaultTemplateId,
   );
   const [data, setData] = useState(
-      defaults(card || templateCardFields(standardTemplate)),
+      defaults(
+        card || {
+          ...templateCardFields(standardTemplate),
+          templateId: standardTemplate?.id || null,
+        },
+      ),
     ),
     [error, setError] = useState(""),
     [conflict, setConflict] = useState(false),
@@ -2970,6 +2981,8 @@ function CardModal({
           method: "PATCH",
           body: { ...bodyFields(fields), version },
         });
+        schemaSnapshot.current = result.customFieldDefinitions || [];
+        setData((current) => ({ ...current, templateId: result.templateId }));
         return result.version;
       },
       onStatus: setSaveStatus,
@@ -2990,15 +3003,52 @@ function CardModal({
     setData((d) => ({ ...d, [key]: value }));
     autosave?.change(key, value, deferred);
   };
+  async function refreshTemplates() {
+    try {
+      const latest = await api(`/boards/${board.id}/templates`);
+      setRecipes(latest.templates);
+      setSchemaError("");
+    } catch (error) {
+      setSchemaError(error.message);
+    }
+  }
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      try {
+        const latest = await api(`/boards/${board.id}/templates`);
+        if (active) {
+          setRecipes(latest.templates);
+          setSchemaError("");
+        }
+      } catch (error) {
+        if (active) setSchemaError(error.message);
+      }
+    };
+    refresh();
+    const timer = setInterval(refresh, 5000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [board.id]);
+  const linkedTemplate = recipes.find((entry) => entry.id === data.templateId);
+  const customFields = resolveCustomFields(
+    linkedTemplate?.fields || [],
+    schemaSnapshot.current,
+  );
   function applyTemplate(id) {
-    setTemplateId(id);
+    if (card) {
+      field("templateId", id || null);
+      return;
+    }
     const preset = defaults(
-      templateCardFields(
-        (board.templates || []).find((entry) => entry.id === id),
-      ),
+      templateCardFields(recipes.find((entry) => entry.id === id)),
     );
     setData((current) => ({
       ...current,
+      templateId: id || null,
+      customValues: {},
       title: preset.title,
       description: preset.description,
       priority: preset.priority,
@@ -3016,6 +3066,7 @@ function CardModal({
       priority: data.priority,
       labels: bodyFields({ labels: data.labels }).labels,
       checklist: data.checklist.map((item) => item.text),
+      fields: customFields.filter((field) => !field.archived),
     });
   }
   async function close() {
@@ -3045,7 +3096,6 @@ function CardModal({
     try {
       const body = {
         ...bodyFields(data),
-        ...(card ? {} : { templateId: null }),
       };
       await api(card ? `/cards/${card.id}` : `/boards/${board.id}/cards`, {
         method: card ? "PATCH" : "POST",
@@ -3066,6 +3116,8 @@ function CardModal({
       if (!found) throw new Error(t("Diese Aufgabe wurde gelöscht."));
       const fresh = defaults(found);
       autosave?.reset(fresh);
+      schemaSnapshot.current = found.customFieldDefinitions || [];
+      setRecipes(latest.templates || []);
       setData(fresh);
       setConflict(false);
       setError("");
@@ -3188,33 +3240,37 @@ function CardModal({
       }
       onClose={close}
     >
-      {!card && (board.templates || []).length > 0 && (
-        <div className="task-template-choice">
-          <label>
-            {t("Aufgabenvorlage")}
-            <select
-              aria-label={t("Aufgabenvorlage")}
-              value={templateId}
-              onChange={(event) => applyTemplate(event.target.value)}
-            >
-              <option value="">{t("Leere Aufgabe")}</option>
-              {board.templates.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.name}
-                  {entry.id === board.defaultTemplateId
-                    ? ` · ${t("Board-Standard")}`
-                    : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p className="form-note">
-            {t(
-              "Die Vorlage setzt Titel, Beschreibung, Priorität, Labels und Checkliste. Du kannst alles vor dem Erstellen anpassen.",
-            )}
-          </p>
-        </div>
-      )}
+      {recipes.length > 0 &&
+        (!card || (!data.templateId && !schemaSnapshot.current.length)) && (
+          <div className="task-template-choice">
+            <label>
+              {t("Aufgabenvorlage")}
+              <select
+                aria-label={t("Aufgabenvorlage")}
+                value={data.templateId || ""}
+                disabled={!canEdit || busy}
+                onChange={(event) => applyTemplate(event.target.value)}
+              >
+                <option value="">{t("Leere Aufgabe")}</option>
+                {recipes.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name}
+                    {entry.id === board.defaultTemplateId
+                      ? ` · ${t("Board-Standard")}`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="form-note">
+              {t(
+                card
+                  ? "Die eigenen Felder dieser Vorlage werden ergänzt. Der Aufgabeninhalt bleibt erhalten."
+                  : "Die Vorlage setzt Titel, Beschreibung, Priorität, Labels und Checkliste. Du kannst alles vor dem Erstellen anpassen.",
+              )}
+            </p>
+          </div>
+        )}
       {card && canEdit && (
         <div
           className={`autosave-status autosave-${saveStatus}`}
@@ -3249,6 +3305,12 @@ function CardModal({
           )}
         </div>
       )}
+      {linkedTemplate && (
+        <p className="form-note">
+          {t("Verknüpfte Vorlage: {0}", [linkedTemplate.name])}
+        </p>
+      )}
+      <FormError error={schemaError} />
       <FormError error={error} />
       {conflict && (
         <button type="button" className="text-button" onClick={reload}>
@@ -3353,6 +3415,19 @@ function CardModal({
                 maxLength={248}
               />
             </label>
+            <CustomTaskFields
+              fields={customFields}
+              values={data.customValues}
+              onRefresh={refreshTemplates}
+              onFinish={() => autosave?.finish("customValues")}
+              onChange={(id, value, deferred = false) =>
+                field(
+                  "customValues",
+                  { ...data.customValues, [id]: value },
+                  deferred,
+                )
+              }
+            />
             <div className="completion-field">
               <span id="task-progress-label">{t("Fortschritt")}</span>
               <div

@@ -22,3 +22,28 @@ export function templateCardFields(template, makeId = checklistId) {
     })),
   };
 }
+
+// Current definitions remain live; historical definitions preserve removed values.
+export function resolveCustomFields(current = [], historical = []) {
+  const live = current.map((field) => {
+    const old = historical.find((entry) => entry.id === field.id);
+    return {
+      ...field,
+      options: [
+        ...(field.options || []),
+        ...(old?.options || [])
+          .filter(
+            (option) =>
+              !(field.options || []).some((entry) => entry.id === option.id),
+          )
+          .map((option) => ({ ...option, archived: true })),
+      ],
+    };
+  });
+  return [
+    ...live,
+    ...historical
+      .filter((field) => !current.some((entry) => entry.id === field.id))
+      .map((field) => ({ ...field, archived: true })),
+  ];
+}

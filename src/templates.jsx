@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { Copy, Plus, Trash2, X, CheckCircle2 } from "lucide-react";
 import { t, useLanguage } from "./i18n.js";
 
+import { CustomFieldsEditor } from "./custom-fields.jsx";
+
 const empty = () => ({
   name: "",
   title: "",
@@ -17,6 +19,16 @@ const formData = (entry) => ({
   priority: entry.priority || "medium",
   labels: (entry.labels || []).join(", "),
   checklist: (entry.checklist || []).join("\n"),
+  fields: (entry.fields || [])
+    .filter((field) => !field.archived)
+    .map(({ id, name, type, options = [] }) => ({
+      id,
+      name,
+      type,
+      options: options
+        .filter((option) => !option.archived)
+        .map(({ id, label }) => ({ id, label })),
+    })),
 });
 const priorityLabels = {
   low: "Niedrig",
@@ -316,6 +328,14 @@ export function TemplatesModal({ board, seed, onClose, onChanged, api }) {
                 onChange={(event) => field("checklist", event.target.value)}
               />
             </label>
+            <CustomFieldsEditor
+              fields={draft.fields}
+              onChange={(fields) => field("fields", fields)}
+              existingIds={(
+                settings.templates.find((entry) => entry.id === selectedId)
+                  ?.fields || []
+              ).map((field) => field.id)}
+            />
             <label className="checkbox-label">
               <input
                 type="checkbox"

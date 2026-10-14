@@ -12,7 +12,10 @@ import {
 import { projectIcons } from "../shared/project-icons.js";
 import { appManifest } from "../shared/pwa.js";
 import { colorThemes } from "../shared/color-themes.js";
-import { templateCardFields } from "../shared/task-templates.js";
+import {
+  templateCardFields,
+  resolveCustomFields,
+} from "../shared/task-templates.js";
 import "dotenv/config";
 import express from "express";
 import helmet from "helmet";
@@ -1006,6 +1009,48 @@ app.patch(
     res.json({ ok: true });
   }),
 );
+const customFieldInput = z
+  .object({
+    id: uuid,
+    name: z.string().trim().min(1).max(100),
+    type: z.enum(["text", "number", "date", "dropdown"]),
+    options: z
+      .array(
+        z
+          .object({ id: uuid, label: z.string().trim().min(1).max(100) })
+          .strict(),
+      )
+      .max(50)
+      .default([]),
+  })
+  .strict()
+  .superRefine((field, ctx) => {
+    if (field.type === "dropdown" && !field.options.length)
+      ctx.addIssue({
+        code: "custom",
+        message: "Dropdowns benötigen mindestens eine Option.",
+      });
+    if (field.type !== "dropdown" && field.options.length)
+      ctx.addIssue({
+        code: "custom",
+        message: "Nur Dropdowns dürfen Optionen enthalten.",
+      });
+    if (
+      new Set(field.options.map((option) => option.id)).size !==
+      field.options.length
+    )
+      ctx.addIssue({
+        code: "custom",
+        message: "Options-IDs müssen eindeutig sein.",
+      });
+  });
+const customFieldsInput = z
+  .array(customFieldInput)
+  .max(20)
+  .refine(
+    (fields) => new Set(fields.map((field) => field.id)).size === fields.length,
+    "Feld-IDs müssen eindeutig sein.",
+  );
 const templateInput = z
   .object({
     name,
@@ -1014,6 +1059,7 @@ const templateInput = z
     priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
     labels: z.array(z.string().trim().min(1).max(30)).max(8).default([]),
     checklist: z.array(z.string().trim().min(1).max(300)).max(50).default([]),
+    fields: customFieldsInput.optional(),
     revision: z.number().int().nonnegative(),
     setAsDefault: z.boolean().optional(),
   })
@@ -1059,7 +1105,28 @@ async function writeTemplate(req, res, existing) {
         new Error("Pro Board sind maximal 20 Vorlagen möglich."),
         { status: 400 },
       );
-    const template = { id, ...content };
+    const previous = templates.find((entry) => entry.id === id);
+    const fields = content.fields ?? previous?.fields ?? [];
+    const linkedCards = existing
+      ? await Card.findAll({
+          where: { BoardId: b.id, templateId: id },
+          attributes: ["customFieldDefinitions"],
+          transaction: t,
+        })
+      : [];
+    const rememberedFields = [
+      ...(previous?.fields || []),
+      ...linkedCards.flatMap((card) => card.customFieldDefinitions || []),
+    ];
+    for (const field of fields) {
+      const old = rememberedFields.find((entry) => entry.id === field.id);
+      if (old && old.type !== field.type)
+        throw Object.assign(
+          new Error("Der Typ bestehender Felder kann nicht geändert werden."),
+          { status: 400 },
+        );
+    }
+    const template = { id, ...content, fields };
     await b.update(
       {
         templates: existing
@@ -1111,6 +1178,23 @@ app.delete(
           throw Object.assign(new Error("Vorlage nicht gefunden."), {
             status: 404,
           });
+        const removed = templates.find((entry) => entry.id === id);
+        const linked = await Card.findAll({
+          where: { BoardId: b.id, templateId: id },
+          transaction: t,
+          lock: t.LOCK.UPDATE,
+        });
+        for (const card of linked)
+          await card.update(
+            {
+              templateId: null,
+              customFieldDefinitions: resolveCustomFields(
+                removed.fields || [],
+                card.customFieldDefinitions || [],
+              ),
+            },
+            { transaction: t, silent: true },
+          );
         await b.update(
           {
             templates: templates.filter((entry) => entry.id !== id),
@@ -1170,6 +1254,17 @@ app.put(
 );
 const cardProgress = z.number().int().min(0).max(100).multipleOf(25);
 const cardInput = z.object({
+  templateId: uuid.nullable().default(null),
+  customValues: z
+    .record(
+      uuid,
+      z.union([z.string().max(5000), z.number().finite(), z.null()]),
+    )
+    .refine(
+      (values) => Object.keys(values).length <= 100,
+      "Zu viele eigene Feldwerte.",
+    )
+    .default({}),
   title: z.string().trim().min(1).max(200),
   description: z.string().max(20000).default(""),
   columnId: uuid,
@@ -1206,6 +1301,47 @@ const cardPatchInput = z
     ),
   )
   .extend({ version: z.number().int().nonnegative() });
+function validateCustomValues(b, input, previous) {
+  const template =
+    input.templateId &&
+    (b.templates || []).find((entry) => entry.id === input.templateId);
+  if (input.templateId && !template)
+    throw Object.assign(new Error("Vorlage nicht gefunden."), { status: 400 });
+  if (previous?.templateId && input.templateId !== previous.templateId)
+    throw Object.assign(
+      new Error("Die verknüpfte Vorlage kann nicht gewechselt werden."),
+      { status: 400 },
+    );
+  const definitions = resolveCustomFields(
+    template?.fields || [],
+    previous?.customFieldDefinitions || [],
+  );
+  for (const [id, value] of Object.entries(input.customValues || {})) {
+    if (previous && previous.customValues?.[id] === value) continue;
+    const field = definitions.find((entry) => entry.id === id);
+    if (!field || field.archived)
+      throw Object.assign(
+        new Error("Dieses eigene Feld ist nicht mehr verfügbar."),
+        { status: 400 },
+      );
+    if (value === null || value === "") continue;
+    const valid =
+      field.type === "text"
+        ? typeof value === "string"
+        : field.type === "number"
+          ? typeof value === "number" && Number.isFinite(value)
+          : field.type === "date"
+            ? z.iso.date().safeParse(value).success
+            : field.options.some(
+                (option) => !option.archived && option.id === value,
+              );
+    if (!valid)
+      throw Object.assign(new Error("Ungültiger Wert für ein eigenes Feld."), {
+        status: 400,
+      });
+  }
+  return definitions;
+}
 async function validateCardFields(b, input, t) {
   if (!b.columns.some((c) => c.id === input.columnId))
     throw Object.assign(new Error("Ungültige Spalte."), { status: 400 });
@@ -1244,7 +1380,9 @@ app.post(
       const input = cardInput.parse({
         ...templateCardFields(template, randomUUID),
         ...req.body,
+        templateId: templateId || null,
       });
+      const customFieldDefinitions = validateCustomValues(b, input);
       await validateCardFields(b, input, t);
       const max = await Card.max("position", {
         where: { BoardId: b.id, columnId: input.columnId },
@@ -1253,6 +1391,7 @@ app.post(
       const c = await Card.create(
         {
           ...input,
+          customFieldDefinitions,
           BoardId: b.id,
           position: (Number.isFinite(max) ? max : -1) + 1,
         },
@@ -1288,6 +1427,11 @@ app.patch(
           { status: 409 },
         );
       const merged = { ...c.toJSON(), ...input };
+      const customFieldDefinitions = validateCustomValues(
+        b,
+        merged,
+        c.toJSON(),
+      );
       await validateCardFields(b, merged, t);
       let position = c.position;
       if (c.columnId !== merged.columnId) {
@@ -1300,7 +1444,7 @@ app.patch(
       const oldColumn = c.columnId;
       const oldProgress = c.progress;
       await c.update(
-        { ...input, position, version: c.version + 1 },
+        { ...input, customFieldDefinitions, position, version: c.version + 1 },
         { transaction: t },
       );
       await b.increment("revision", { transaction: t });
@@ -1321,7 +1465,11 @@ app.patch(
         c.title,
         t,
       );
-      return { version: c.version };
+      return {
+        version: c.version,
+        templateId: c.templateId,
+        customFieldDefinitions: c.customFieldDefinitions,
+      };
     });
     res.json({ ok: true, ...updated });
   }),

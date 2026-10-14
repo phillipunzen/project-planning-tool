@@ -67,6 +67,9 @@ export const Card = db.define("Card", {
   dueDate: D.DATEONLY,
   labels: { type: D.JSON, defaultValue: [] },
   checklist: { type: D.JSON, defaultValue: [] },
+  templateId: D.STRING(36),
+  customValues: { type: D.JSON, allowNull: false, defaultValue: {} },
+  customFieldDefinitions: { type: D.JSON, allowNull: false, defaultValue: [] },
   version: { type: D.INTEGER, defaultValue: 0 },
 });
 Board.hasMany(Card, { onDelete: "CASCADE" });
@@ -204,6 +207,25 @@ export async function initializeDatabase() {
       allowNull: false,
       defaultValue: 0,
     });
+  if (!schema.templateId)
+    await db
+      .getQueryInterface()
+      .addColumn("Cards", "templateId", { type: D.STRING(36) });
+  for (const [key, empty] of [
+    ["customValues", "{}"],
+    ["customFieldDefinitions", "[]"],
+  ]) {
+    if (!schema[key])
+      await db.getQueryInterface().addColumn("Cards", key, {
+        type: D.JSON,
+        allowNull: false,
+        defaultValue: db.literal(`'${empty}'`),
+      });
+    await db.query(
+      `UPDATE \`Cards\` SET \`${key}\` = :empty WHERE \`${key}\` IS NULL OR \`${key}\` = ''`,
+      { replacements: { empty }, type: "UPDATE" },
+    );
+  }
   await Setting.findOrCreate({
     where: { key: "installation" },
     defaults: { value: "{}" },

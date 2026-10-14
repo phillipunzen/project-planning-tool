@@ -287,7 +287,13 @@ try {
   const afterDelete = await (
     await context.request.get(base + `/api/boards/${boardId}`)
   ).json();
-  assert.deepEqual(afterDelete.cards, current.cards);
+  assert.deepEqual(
+    afterDelete.cards,
+    current.cards.map((entry) => ({
+      ...entry,
+      templateId: entry.templateId === id ? null : entry.templateId,
+    })),
+  );
   await page
     .getByRole("button", { name: "Admin Servicefall", exact: true })
     .click();
