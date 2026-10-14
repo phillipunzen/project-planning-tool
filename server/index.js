@@ -18,6 +18,7 @@ import {
 } from "../shared/task-templates.js";
 import "dotenv/config";
 import express from "express";
+import { integrationAuth, installTokenRoutes } from "./integration-api.js";
 import helmet from "helmet";
 import session from "express-session";
 import { rateLimit } from "express-rate-limit";
@@ -122,10 +123,22 @@ app.use(
     },
   }),
 );
+app.use(
+  "/api/v1",
+  rateLimit({
+    windowMs: 60000,
+    limit: 300,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: { error: "Zu viele API-Anfragen. Bitte später erneut versuchen." },
+  }),
+);
+app.use("/api", integrationAuth);
 app.use("/api", (req, res, next) => {
   res.set("Cache-Control", "no-store");
   if (
     !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
+    !req.apiToken &&
     !allowedOrigins.has(req.get("origin"))
   )
     return res.status(403).json({ error: "Ungültiger Anfrageursprung." });
@@ -517,6 +530,7 @@ app.use("/api", (req, res, next) => {
     return next();
   requireUser(req, res, next);
 });
+installTokenRoutes(app, api);
 const pendingInvitation = () => ({
   acceptedAt: null,
   expiresAt: { [Op.gt]: new Date() },
@@ -1401,6 +1415,19 @@ app.post(
       return c;
     });
     res.status(201).json(card);
+  }),
+);
+app.get(
+  "/api/cards/:id",
+  api(async (req, res) => {
+    const card = await Card.findByPk(uuid.parse(req.params.id));
+    if (!card)
+      throw Object.assign(new Error("Aufgabe nicht gefunden."), {
+        status: 404,
+      });
+    const board = await Board.findByPk(card.BoardId);
+    await member(req, board.ProjectId);
+    res.json(card);
   }),
 );
 app.patch(

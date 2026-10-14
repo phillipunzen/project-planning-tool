@@ -177,6 +177,7 @@ export async function loginSession(req, user) {
   );
 }
 export async function requireUser(req, res, next) {
+  if (req.apiToken && req.user) return next();
   try {
     const user =
       req.session.userId && (await User.findByPk(req.session.userId));

@@ -96,6 +96,7 @@ import { CardAutosave } from "./card-autosave.js";
 import { usePwaInstalled, promptInstall } from "./pwa.js";
 import { CustomTaskFields } from "./custom-fields.jsx";
 import { TemplatesModal } from "./templates.jsx";
+import { ApiAccessModal } from "./api-access.jsx";
 import { InvitationInbox } from "./invitations.jsx";
 import { InviteUserSearch } from "./invite-search.jsx";
 import {
@@ -1185,9 +1186,13 @@ function App() {
           </div>
         </Modal>
       )}
+      {modal?.type === "api-access" && (
+        <ApiAccessModal api={api} onClose={() => setModal(null)} />
+      )}
       {modal?.type === "profile" && (
         <ProfileModal
           user={user}
+          onApi={() => setModal({ type: "api-access" })}
           onClose={() => setModal(null)}
           onSaved={(updated) => {
             setLanguagePreference(updated.language);
@@ -1327,7 +1332,7 @@ function Brand() {
     </div>
   );
 }
-function ProfileModal({ user, onClose, onSaved }) {
+function ProfileModal({ user, onClose, onSaved, onApi }) {
   const [language, setLanguage] = useState(user.language || "system");
   const [theme, setTheme] = useState(user.theme || "indigo");
   const [error, setError] = useState("");
@@ -1398,6 +1403,13 @@ function ProfileModal({ user, onClose, onSaved }) {
           </button>
         </div>
       </form>
+      <button
+        className="button secondary api-profile-action"
+        type="button"
+        onClick={onApi}
+      >
+        {t("API-Zugriff verwalten")}
+      </button>
     </Modal>
   );
 }

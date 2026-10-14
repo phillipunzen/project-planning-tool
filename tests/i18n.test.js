@@ -52,6 +52,7 @@ test("every static interface message has an English translation with matching pl
     "src/custom-fields.jsx",
     "src/invite-search.jsx",
     "src/invitations.jsx",
+    "src/api-access.jsx",
   ]) {
     const source = fs.readFileSync(
       new URL("../" + file, import.meta.url),

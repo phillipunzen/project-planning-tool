@@ -28,6 +28,18 @@ export const User = db.define("User", {
   language: { type: D.STRING(10), allowNull: false, defaultValue: "system" },
   theme: { type: D.STRING(20), allowNull: false, defaultValue: "indigo" },
 });
+export const ApiToken = db.define("ApiToken", {
+  id,
+  name: { type: D.STRING(100), allowNull: false },
+  tokenHash: { type: D.STRING(64), allowNull: false, unique: true },
+  mode: { type: D.STRING(10), allowNull: false },
+  boardIds: { type: D.JSON, allowNull: false },
+  expiresAt: { type: D.DATE, allowNull: false },
+  revokedAt: D.DATE,
+  lastUsedAt: D.DATE,
+});
+User.hasMany(ApiToken, { onDelete: "CASCADE" });
+ApiToken.belongsTo(User);
 export const Project = db.define("Project", {
   id,
   name: { type: D.STRING(100), allowNull: false },
