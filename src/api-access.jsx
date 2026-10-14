@@ -54,7 +54,12 @@ export function ApiAccessModal({ api, onClose }) {
     try {
       const result = await api("/me/api-tokens", {
         method: "POST",
-        body: { name, mode, boardIds, expiresInDays: Number(days) },
+        body: {
+          name,
+          mode,
+          boardIds,
+          expiresInDays: days === "unlimited" ? null : Number(days),
+        },
       });
       setSecret(result.token);
       setSecretId(result.id);
@@ -214,6 +219,7 @@ export function ApiAccessModal({ api, onClose }) {
                 value={days}
                 onChange={(event) => setDays(event.target.value)}
               >
+                <option value="unlimited">{t("Unbegrenzt")}</option>
                 {[7, 30, 90, 365].map((value) => (
                   <option key={value} value={value}>
                     {t("{0} Tage", [value])}
@@ -259,7 +265,9 @@ export function ApiAccessModal({ api, onClose }) {
               !boardIds.length ||
               tokens.filter(
                 (token) =>
-                  !token.revokedAt && new Date(token.expiresAt) > new Date(),
+                  !token.revokedAt &&
+                  (token.expiresAt === null ||
+                    new Date(token.expiresAt) > new Date()),
               ).length >= 20
             }
           >
@@ -272,7 +280,9 @@ export function ApiAccessModal({ api, onClose }) {
         <h3>{t("Deine API-Tokens")}</h3>
         {tokens.map((token) => {
           const active =
-            !token.revokedAt && new Date(token.expiresAt) > new Date();
+            !token.revokedAt &&
+            (token.expiresAt === null ||
+              new Date(token.expiresAt) > new Date());
           return (
             <div key={token.id} className="api-token-row">
               <KeyRound size={18} />
@@ -301,11 +311,13 @@ export function ApiAccessModal({ api, onClose }) {
                     ? t("Token ist widerrufen")
                     : !active
                       ? t("Abgelaufen")
-                      : t("Gültig bis {0}", [
-                          new Date(token.expiresAt).toLocaleDateString(
-                            getLocale(),
-                          ),
-                        ])}
+                      : token.expiresAt === null
+                        ? t("Unbegrenzt")
+                        : t("Gültig bis {0}", [
+                            new Date(token.expiresAt).toLocaleDateString(
+                              getLocale(),
+                            ),
+                          ])}
                 </small>
               </div>
               {active && (

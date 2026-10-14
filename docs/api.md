@@ -1,6 +1,6 @@
 # Board API v1
 
-Die REST-API für KI-Assistenten und Anwendungen liegt unter `/api/v1`. In **Profileinstellungen → API-Zugriff verwalten** einen Namen, Leserechte oder Schreibrechte, die freigegebenen Boards und eine Gültigkeit wählen. Den anschließend einmal angezeigten Token kopieren und als Geheimnis in der Anwendung hinterlegen. Token können in derselben Oberfläche widerrufen werden. Bis zu 20 aktive Tokens je Benutzer, bis zu 50 Boards je Token und maximal 365 Tage Gültigkeit.
+Die REST-API für KI-Assistenten und Anwendungen liegt unter `/api/v1`. In **Profileinstellungen → API-Zugriff verwalten** einen Namen, Leserechte oder Schreibrechte, die freigegebenen Boards und eine Gültigkeit wählen. Den anschließend einmal angezeigten Token kopieren und als Geheimnis in der Anwendung hinterlegen. Token können in derselben Oberfläche widerrufen werden. Bis zu 20 aktive Tokens je Benutzer, bis zu 50 Boards je Token und wahlweise 1–365 Tage Gültigkeit oder **Unbegrenzt**. Unbegrenzte Tokens haben kein Ablaufdatum und bleiben bis zum Widerruf gültig; Board-Freigaben und aktuelle Benutzerberechtigungen werden weiterhin geprüft.
 
 Die OpenAPI-3.0.3-Spezifikation ist für angemeldete Benutzer unter `/api/integration/openapi.json` und mit API-Token unter `/api/v1/openapi.json` verfügbar. Sie beschreibt die Methoden, Datenfelder, Bearbeitungsversionen und Statuscodes und kann von KI-/API-Werkzeugen eingelesen werden.
 
@@ -9,6 +9,8 @@ Die OpenAPI-3.0.3-Spezifikation ist für angemeldete Benutzer unter `/api/integr
 Die Swagger UI liegt unter `/api/docs` und ist nach der Anmeldung erreichbar. In **Profileinstellungen → API-Zugriff verwalten → Swagger API-Dokumentation öffnen** öffnen, über **Authorize** den API-Token ohne den Präfix „Bearer“ eintragen und einen Endpunkt mit **Try it out → Execute** ausprobieren. Die JSON-Spezifikation bleibt über die bisherigen Endpunkte verfügbar.
 
 Die Swagger-Oberfläche wird vollständig von der eigenen Installation geladen. Die Autorisierung wird nicht dauerhaft gespeichert und ist nach Neuladen der Seite erneut erforderlich. Anfragen verwenden dieselben Board-Freigaben, Schreibrechte und Versionsprüfungen wie externe API-Clients. Für Änderungen zuerst die aktuellen IDs sowie `version` oder `revision` lesen.
+
+Beim Erstellen über `/api/me/api-tokens` bedeutet `expiresInDays: null` „Unbegrenzt“; ohne diese Angabe bleibt die Voreinstellung 90 Tage. Die Token-Metadaten enthalten für unbegrenzte Tokens `expiresAt: null`. Bestehende Tokens behalten ihr bisheriges Ablaufdatum.
 
 ## Anmeldung und Berechtigungen
 

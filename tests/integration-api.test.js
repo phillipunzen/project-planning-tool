@@ -176,6 +176,62 @@ try {
       },
     );
     await t.test(
+      "expiry migration preserves existing deadlines and token hashes",
+      async () => {
+        const before = (await ApiToken.findAll({ order: [["id", "ASC"]] })).map(
+          (row) => row.toJSON(),
+        );
+        assert.equal(db.getDatabaseName(), "projektwerk_test");
+        await db.query(
+          "ALTER TABLE `ApiTokens` MODIFY COLUMN `expiresAt` DATETIME NOT NULL",
+        );
+        await initializeDatabase();
+        await initializeDatabase();
+        assert.equal(
+          (await db.getQueryInterface().describeTable("ApiTokens")).expiresAt
+            .allowNull,
+          true,
+        );
+        assert.deepEqual(
+          (await ApiToken.findAll({ order: [["id", "ASC"]] })).map((row) =>
+            row.toJSON(),
+          ),
+          before,
+        );
+        assert.equal((await tokenCall(read.token, "/boards")).status, 200);
+      },
+    );
+    await t.test(
+      "unlimited tokens remain scoped and can be disabled or revoked",
+      async () => {
+        const result = await admin("/me/api-tokens", "POST", {
+          name: "No expiration",
+          mode: "read",
+          boardIds: [board.id],
+          expiresInDays: null,
+        });
+        assert.equal(result.status, 201);
+        const token = result.data;
+        assert.equal(token.expiresAt, null);
+        assert.equal((await ApiToken.findByPk(token.id)).expiresAt, null);
+        assert.equal((await tokenCall(token.token, "/boards")).status, 200);
+        assert.equal(
+          (await tokenCall(token.token, `/boards/${otherBoard.id}`)).status,
+          403,
+        );
+        const owner = (await admin("/me")).data;
+        await User.update({ disabled: true }, { where: { id: owner.id } });
+        assert.equal((await tokenCall(token.token, "/boards")).status, 401);
+        await User.update({ disabled: false }, { where: { id: owner.id } });
+        assert.equal((await tokenCall(token.token, "/boards")).status, 200);
+        assert.equal(
+          (await admin(`/me/api-tokens/${token.id}`, "DELETE")).status,
+          200,
+        );
+        assert.equal((await tokenCall(token.token, "/boards")).status, 401);
+      },
+    );
+    await t.test(
       "bearer auth is required and restricted to the versioned board API",
       async () => {
         assert.equal((await tokenCall(null, "/boards")).status, 401);
@@ -447,6 +503,40 @@ try {
         assert.equal((await tokenCall(write.token, "/boards")).status, 401);
         assert.equal(
           (await admin(`/me/api-tokens/${write.id}`, "DELETE")).status,
+          200,
+        );
+      },
+    );
+    await t.test(
+      "unlimited tokens count toward the active-token limit",
+      async () => {
+        const owner = (await admin("/me")).data;
+        const rows = await ApiToken.bulkCreate(
+          Array.from({ length: 20 }, () => ({
+            name: "Fixture",
+            mode: "read",
+            boardIds: [board.id],
+            expiresAt: null,
+            UserId: owner.id,
+            tokenHash: randomUUID().replaceAll("-", "").padEnd(64, "a"),
+          })),
+        );
+        const input = {
+          name: "Limit",
+          mode: "read",
+          boardIds: [board.id],
+          expiresInDays: null,
+        };
+        assert.equal(
+          (await admin("/me/api-tokens", "POST", input)).status,
+          400,
+        );
+        await admin(`/me/api-tokens/${rows[0].id}`, "DELETE");
+        const available = await admin("/me/api-tokens", "POST", input);
+        assert.equal(available.status, 201);
+        assert.equal(available.data.expiresAt, null);
+        assert.equal(
+          (await tokenCall(available.data.token, "/boards")).status,
           200,
         );
       },

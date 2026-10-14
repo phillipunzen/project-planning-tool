@@ -34,7 +34,7 @@ export const ApiToken = db.define("ApiToken", {
   tokenHash: { type: D.STRING(64), allowNull: false, unique: true },
   mode: { type: D.STRING(10), allowNull: false },
   boardIds: { type: D.JSON, allowNull: false },
-  expiresAt: { type: D.DATE, allowNull: false },
+  expiresAt: { type: D.DATE, allowNull: true },
   revokedAt: D.DATE,
   lastUsedAt: D.DATE,
 });
@@ -180,6 +180,15 @@ export async function initializeDatabase() {
   await db.authenticate();
   // Version 1 is an additive initial schema. Never use sync({alter:true}) on live data.
   await db.sync();
+  const apiTokens = await db.getQueryInterface().describeTable("ApiTokens");
+  if (!apiTokens.expiresAt.allowNull) {
+    await db
+      .getQueryInterface()
+      .changeColumn("ApiTokens", "expiresAt", {
+        type: D.DATE,
+        allowNull: true,
+      });
+  }
   const users = await db.getQueryInterface().describeTable("Users");
   if (!users.language)
     await db.getQueryInterface().addColumn("Users", "language", {

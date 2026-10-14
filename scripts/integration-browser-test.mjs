@@ -57,6 +57,9 @@ try {
   );
   await page.getByLabel("Tokenname", { exact: true }).fill("KI Assistent");
   await page
+    .getByLabel("Token-Gültigkeit", { exact: true })
+    .selectOption("unlimited");
+  await page
     .getByLabel("API-Berechtigung", { exact: true })
     .selectOption("write");
   await page.locator(".api-board-list input").first().check();
@@ -97,6 +100,9 @@ try {
   await expect(
     page.locator(".api-token-row").getByText("KI Assistent", { exact: true }),
   ).toBeVisible();
+  await expect(
+    page.locator(".api-token-row").getByText("Unbegrenzt", { exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Widerrufen", exact: true }).click();
   await expect(
     page.getByText("Token ist widerrufen", { exact: true }),
@@ -129,6 +135,9 @@ try {
     .getByRole("button", { name: "Manage API access", exact: true })
     .tap();
   await mobile.getByLabel("Token name", { exact: true }).fill("Mobile reader");
+  await mobile
+    .getByLabel("Token validity", { exact: true })
+    .selectOption("unlimited");
   await mobile.locator(".api-board-list input").first().check();
   await mobile
     .getByRole("button", { name: "Create API token", exact: true })
@@ -136,9 +145,22 @@ try {
   await expect(
     mobile.getByLabel("New API token", { exact: true }),
   ).toBeVisible();
+  await expect(
+    mobile
+      .locator(".api-token-row")
+      .getByText("No expiration", { exact: true }),
+  ).toBeVisible();
   const readToken = await mobile
     .getByLabel("New API token", { exact: true })
     .inputValue();
+  assert.equal(
+    (
+      await fetch(base + "/api/v1/boards", {
+        headers: { Authorization: `Bearer ${readToken}` },
+      })
+    ).status,
+    200,
+  );
   assert.equal(
     (
       await fetch(base + `/api/v1/cards/${created.data.id}`, {

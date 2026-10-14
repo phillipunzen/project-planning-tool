@@ -595,5 +595,6 @@
   "Token ist widerrufen": "Token revoked",
   "Board nicht mehr verfügbar": "Board no longer accessible",
   "Wird erstellt …": "Creating …",
-  "Swagger API-Dokumentation öffnen": "Open Swagger API documentation"
+  "Swagger API-Dokumentation öffnen": "Open Swagger API documentation",
+  "Unbegrenzt": "No expiration"
 }

@@ -6,6 +6,9 @@ import { installSwaggerDocs } from "./swagger-docs.js";
 import { integrationOpenApi } from "../shared/integration-openapi.js";
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const uuid = z.uuid().transform((value) => value.toLowerCase());
+const unexpiredTokens = () => ({
+  [Op.or]: [{ expiresAt: null }, { expiresAt: { [Op.gt]: new Date() } }],
+});
 const tokenMetadata = (token) => ({
   id: token.id,
   name: token.name,
@@ -38,7 +41,7 @@ export async function integrationAuth(req, res, next) {
       where: {
         tokenHash: hash(secret),
         revokedAt: null,
-        expiresAt: { [Op.gt]: new Date() },
+        ...unexpiredTokens(),
       },
     });
     const user = token && (await User.findByPk(token.UserId));
@@ -203,7 +206,13 @@ export function installTokenRoutes(app, api) {
             .min(1)
             .max(50)
             .refine((ids) => new Set(ids).size === ids.length),
-          expiresInDays: z.number().int().min(1).max(365).default(90),
+          expiresInDays: z
+            .number()
+            .int()
+            .min(1)
+            .max(365)
+            .nullable()
+            .default(90),
         })
         .strict()
         .parse(req.body);
@@ -238,7 +247,7 @@ export function installTokenRoutes(app, api) {
               where: {
                 UserId: req.user.id,
                 revokedAt: null,
-                expiresAt: { [Op.gt]: new Date() },
+                ...unexpiredTokens(),
               },
               transaction,
             })) >= 20
@@ -251,7 +260,10 @@ export function installTokenRoutes(app, api) {
               boardIds: input.boardIds,
               UserId: req.user.id,
               tokenHash: hash(secret),
-              expiresAt: new Date(Date.now() + input.expiresInDays * 86400000),
+              expiresAt:
+                input.expiresInDays === null
+                  ? null
+                  : new Date(Date.now() + input.expiresInDays * 86400000),
             },
             { transaction },
           );
