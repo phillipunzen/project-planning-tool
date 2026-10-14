@@ -6,6 +6,11 @@ Repository: [phillipunzen/project-planning-tool](https://github.com/phillipunzen
 
 ## Funktionen
 
+- Handy-Bedienung mit Bucket-Auswahl, größeren Touch-Flächen, 16-Pixel-Eingabefeldern und einem bildschirmfüllenden Aufgabendialog. Statusänderungen sind auch ohne Drag-and-drop über die Kartendetails möglich.
+- Einladungen: Projekteigentümer suchen bereits registrierte, aktive Benutzer nach Anzeigename oder E-Mail-Adresse. Bereits vorhandene Projektmitglieder werden ausgeblendet. Neue Personen weiterhin direkt über ihre E-Mail-Adresse einladen; der Einladungslink wird persönlich geteilt.
+- Persönliche Farbthemes unter „Profileinstellungen“: Violett, Ozeanblau, Waldgrün, Sonnenuntergang und Rosé. Die Wahl wird im Benutzerprofil gespeichert und beim nächsten Öffnen/Anmelden auf anderen Geräten übernommen. Hell-/Dunkelmodus bleibt separat wählbar.
+- Gemeinsame Aufgabenvorlagen pro Kanban-Board: bis zu 20 Vorlagen mit Titel, Beschreibung, Priorität, Labels und Checkliste. Bearbeiter verwalten Vorlagen und wählen einen gemeinsamen Board-Standard. Neue Karten erhalten diesen Standard; alternativ eine andere Vorlage oder eine leere Aufgabe wählen. „Als Vorlage speichern“ übernimmt den Inhalt einer bestehenden Karte. Checklisten erhalten neue IDs und offene Häkchen, Fortschritt startet bei 0%; Termine, Zuweisungen, Anhänge und Kommentare werden nicht kopiert. Bestehende Karten bleiben beim Ändern/Löschen einer Vorlage erhalten.
+
 - Große Schaltflächen zum Anlegen neuer Aufgaben direkt oben in jedem Bucket, sichtbare Bearbeiten-Aktion auf den Karten und ein größerer Aufgabendialog. Bucket-Überschriften per Klick umbenennen; Enter oder Verlassen des Felds speichert, Escape bricht ab. Fehler behalten den Entwurf, gleichzeitig geänderte Namen werden nicht überschrieben.
 
 - Eigener Name und eigenes Logo unter „Administration → Allgemein“. Nur Administratoren dürfen die Einstellungen ändern. Name (1–60 Zeichen) und Logo gelten auf Anmeldung und Arbeitsbereich; das Logo dient auch als Browser-Symbol. PNG, JPG und WebP bis 2 MB und 4096 × 4096 Pixel, mit Vorschau und Entfernen-Funktion. Der Name liegt in MariaDB, das Logo im persistenten Upload-Volume; beide werden von der bestehenden Sicherung erfasst.
@@ -260,3 +265,7 @@ Diese Prüfung verwendet Beispielwerte ohne echte Zugangsdaten. Sie prüft, dass
 - [Sequelize: MariaDB-Dialekt](https://sequelize.org/docs/v6/other-topics/dialect-specific-things/)
 
 PWA-Browserprüfung nach `npm run build` mit `npm run test:pwa` ausführen (dieselbe Datenbankverbindung wie bei `test:ui`). Sie prüft die Installierbarkeit mit Chromium, Manifest und Icons, öffentliche Offline-Caches, ausgeschlossene API-Zugriffe, deutsche/englische Hinweisseiten, Dark Mode und Updates ohne erzwungenes Neuladen. Der native Installationsdialog wird über sein Browser-Ereignis getestet; die tatsächliche Installation auf iOS und Android ist anschließend am jeweiligen Gerät zu prüfen.
+
+Die zusätzlichen Benutzer- und Board-Felder für Farbthemes und Vorlagen werden beim Start additiv ergänzt. Die Migration initialisiert bestehende Boards mit einer gültigen leeren Vorlagenliste. Es gibt keine Rücksetzung bestehender Projekte, Karten oder Benutzer. Vor einem Update wie bisher Datenbank und Anhänge sichern.
+
+`npm run test:features` prüft Benutzersuche und Einladung, gemeinsame Board-Vorlagen für zwei Konten, unabhängige Checklisten, Konfliktentwürfe, persönliche Themes und die Handy-Bedienung. Nach `npm run build` mit derselben Datenbankverbindung wie `test:ui` ausführen. Alle Tests mit MariaDB nacheinander ausführen; sie setzen ausschließlich `projektwerk_test` zurück. Die neuen API-Prüfungen sind Bestandteil von `npm test` und prüfen auch die Übernahme bestehender Daten bei der Schemaerweiterung.

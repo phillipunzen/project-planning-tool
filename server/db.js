@@ -26,6 +26,7 @@ export const User = db.define("User", {
   externalId: { type: D.STRING(64), unique: true },
   color: { type: D.STRING(20), defaultValue: "#6366f1" },
   language: { type: D.STRING(10), allowNull: false, defaultValue: "system" },
+  theme: { type: D.STRING(20), allowNull: false, defaultValue: "indigo" },
 });
 export const Project = db.define("Project", {
   id,
@@ -49,6 +50,9 @@ export const Board = db.define("Board", {
   name: { type: D.STRING(100), allowNull: false },
   columns: { type: D.JSON, allowNull: false },
   revision: { type: D.INTEGER, defaultValue: 0 },
+  templates: { type: D.JSON, allowNull: false, defaultValue: [] },
+  defaultTemplateId: { type: D.STRING(36), allowNull: true },
+  templateRevision: { type: D.INTEGER, allowNull: false, defaultValue: 0 },
 });
 Project.hasMany(Board, { onDelete: "CASCADE" });
 Board.belongsTo(Project);
@@ -109,6 +113,7 @@ export const publicUser = (u) => ({
   authType: u.authType,
   color: u.color,
   language: u.language,
+  theme: u.theme,
 });
 export class DatabaseSessionStore extends session.Store {
   get(sid, cb) {
@@ -154,6 +159,39 @@ export async function initializeDatabase() {
       type: D.STRING(10),
       allowNull: false,
       defaultValue: "system",
+    });
+  if (!users.theme)
+    await db.getQueryInterface().addColumn("Users", "theme", {
+      type: D.STRING(20),
+      allowNull: false,
+      defaultValue: "indigo",
+    });
+  const boards = await db.getQueryInterface().describeTable("Boards");
+  if (!boards.templates)
+    await db.getQueryInterface().addColumn("Boards", "templates", {
+      type: D.JSON,
+      allowNull: false,
+      // Array defaults are omitted by Sequelize's addColumn SQL generator.
+      defaultValue: db.literal("'[]'"),
+    });
+  // Resume safely if an interrupted upgrade left an uninitialized JSON value.
+  await db.query(
+    "UPDATE `Boards` SET `templates` = :empty WHERE `templates` IS NULL OR `templates` = ''",
+    {
+      replacements: { empty: "[]" },
+      type: "UPDATE",
+    },
+  );
+  if (!boards.defaultTemplateId)
+    await db.getQueryInterface().addColumn("Boards", "defaultTemplateId", {
+      type: D.STRING(36),
+      allowNull: true,
+    });
+  if (!boards.templateRevision)
+    await db.getQueryInterface().addColumn("Boards", "templateRevision", {
+      type: D.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
     });
   const schema = await db.getQueryInterface().describeTable("Cards");
   if (!schema.checklist)

@@ -77,7 +77,12 @@ import {
   Pencil,
 } from "lucide-react";
 import "./styles.css";
-import { ThemeProvider, ThemeControl } from "./theme.jsx";
+import {
+  ThemeProvider,
+  ThemeControl,
+  useColorTheme,
+  ColorThemeChoices,
+} from "./theme.jsx";
 import {
   t,
   getLocale,
@@ -89,6 +94,9 @@ import { useBranding, setBranding } from "./branding.js";
 import { projectIcons } from "../shared/project-icons.js";
 import { CardAutosave } from "./card-autosave.js";
 import { usePwaInstalled, promptInstall } from "./pwa.js";
+import { TemplatesModal } from "./templates.jsx";
+import { InviteUserSearch } from "./invite-search.jsx";
+import { templateCardFields } from "../shared/task-templates.js";
 async function api(url, options = {}) {
   const response = await fetch(`/api${url}`, {
     credentials: "same-origin",
@@ -251,6 +259,7 @@ function Modal({
   children,
   wide = false,
   className = "",
+  headerContent,
 }) {
   const ref = useRef();
   useEffect(() => {
@@ -270,19 +279,22 @@ function Modal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="modal-heading">
-        <div>
-          <h2>{title}</h2>
-          {subtitle && <p>{subtitle}</p>}
+      <div className="modal-header-container">
+        <div className="modal-heading">
+          <div>
+            <h2>{title}</h2>
+            {subtitle && <p>{subtitle}</p>}
+          </div>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={t("Schließen")}
+            onClick={onClose}
+          >
+            <X size={20} />
+          </button>
         </div>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={t("Schließen")}
-          onClick={onClose}
-        >
-          <X size={20} />
-        </button>
+        {headerContent}
       </div>
       {children}
     </dialog>
@@ -299,6 +311,7 @@ function FormError({ error }) {
 function App() {
   useLanguage();
   const pwaInstalled = usePwaInstalled();
+  const { changeColorTheme } = useColorTheme();
   const [publicInfo, setPublicInfo] = useState(null),
     [user, setUser] = useState(null),
     [loading, setLoading] = useState(true),
@@ -306,6 +319,9 @@ function App() {
   useEffect(() => {
     setLanguagePreference(user?.language || "system");
   }, [user?.language, user?.id]);
+  useEffect(() => {
+    if (user) changeColorTheme(user.theme || "indigo");
+  }, [user?.id, user?.theme]);
   const [projects, setProjects] = useState([]),
     [projectId, setProjectId] = useState(null),
     [boardId, setBoardId] = useState(null),
@@ -518,6 +534,30 @@ function App() {
       t("Aufgabe verschoben"),
     );
   }
+  const openingCard = useRef(false);
+  async function openNewCard(columnId) {
+    if (!board || openingCard.current) return;
+    openingCard.current = true;
+    try {
+      const settings = await api(`/boards/${board.id}/templates`);
+      if (currentBoard.current !== board.id) return;
+      setBoard((current) =>
+        current?.id === board.id
+          ? {
+              ...current,
+              templates: settings.templates,
+              defaultTemplateId: settings.defaultTemplateId,
+              templateRevision: settings.revision,
+            }
+          : current,
+      );
+      setModal({ type: "card", columnId });
+    } catch (e) {
+      notify(e.message, true);
+    } finally {
+      openingCard.current = false;
+    }
+  }
   async function renameColumn(id, nextName, originalName) {
     if (!board || !canEdit)
       throw new Error(t("Du hast keine Berechtigung für diese Aktion."));
@@ -701,7 +741,10 @@ function App() {
           )}
           <button
             className="settings-nav"
-            onClick={() => setModal({ type: "profile" })}
+            onClick={() => {
+              setModal({ type: "profile" });
+              setSideOpen(false);
+            }}
           >
             <Users size={17} />
             {t(" Profileinstellungen")}
@@ -964,16 +1007,20 @@ function App() {
                         {t("Buckets bearbeiten")}
                       </button>
                     )}
+                    {board && canEdit && (
+                      <button
+                        className="button secondary"
+                        onClick={() => setModal({ type: "templates" })}
+                      >
+                        <Copy size={17} />
+                        {t("Aufgabenvorlagen")}
+                      </button>
+                    )}
                     {canEdit && (
                       <button
                         className="button primary"
                         disabled={!board || busy}
-                        onClick={() =>
-                          setModal({
-                            type: "card",
-                            columnId: board.columns[0].id,
-                          })
-                        }
+                        onClick={() => openNewCard(board.columns[0].id)}
                       >
                         <Plus size={17} />
                         {t("Aufgabe erstellen")}
@@ -1014,7 +1061,7 @@ function App() {
                   canEdit={canEdit && !busy}
                   onMove={move}
                   onOpen={(c) => setModal({ type: "card", card: c })}
-                  onAdd={(col) => setModal({ type: "card", columnId: col })}
+                  onAdd={openNewCard}
                   onRename={renameColumn}
                 />
               )}
@@ -1142,6 +1189,15 @@ function App() {
           }}
         />
       )}
+      {modal?.type === "templates" && (
+        <TemplatesModal
+          board={board}
+          seed={modal.seed}
+          onClose={() => setModal(null)}
+          onChanged={refreshBoard}
+          api={api}
+        />
+      )}
       {modal?.type === "card" && (
         <CardModal
           card={modal.card}
@@ -1151,6 +1207,7 @@ function App() {
           user={user}
           canEdit={canEdit}
           onChanged={() => refreshBoard()}
+          onTemplate={(seed) => setModal({ type: "templates", seed })}
           onClose={() => {
             setModal(null);
             refreshBoard();
@@ -1222,6 +1279,7 @@ function Brand() {
 }
 function ProfileModal({ user, onClose, onSaved }) {
   const [language, setLanguage] = useState(user.language || "system");
+  const [theme, setTheme] = useState(user.theme || "indigo");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   async function submit(event) {
@@ -1229,7 +1287,10 @@ function ProfileModal({ user, onClose, onSaved }) {
     setBusy(true);
     setError("");
     try {
-      const updated = await api("/me", { method: "PATCH", body: { language } });
+      const updated = await api("/me", {
+        method: "PATCH",
+        body: { language, theme },
+      });
       onSaved(updated);
     } catch (e) {
       setError(e.message);
@@ -1268,6 +1329,13 @@ function ProfileModal({ user, onClose, onSaved }) {
         <p className="bucket-note">
           {t(
             "Die Auswahl wird in deinem Benutzerprofil gespeichert. Bei „Automatisch“ wird die erste unterstützte Browsersprache verwendet.",
+          )}
+        </p>
+        <label>{t("Farbtheme")}</label>
+        <ColorThemeChoices value={theme} onChange={setTheme} disabled={busy} />
+        <p className="form-note">
+          {t(
+            "Das Farbtheme wird in deinem Profil gespeichert und gilt auf allen Geräten. Hell und Dunkel bleiben separat wählbar.",
           )}
         </p>
         <FormError error={error} />
@@ -1454,9 +1522,11 @@ function AuthScreen({
               </label>
             )}
             <label>
-              {method === "ldap" && !setup
-                ? "AD-Benutzername"
-                : "E-Mail-Adresse"}
+              {t(
+                method === "ldap" && !setup
+                  ? "AD-Benutzername"
+                  : "E-Mail-Adresse",
+              )}
               <div className="input-with-icon">
                 <Mail size={17} />
                 <input
@@ -1882,6 +1952,7 @@ function Column({ column, cards, onOpen, onAdd, onRename, canEdit }) {
   return (
     <section
       ref={setNodeRef}
+      data-bucket-id={column.id}
       className={`kanban-column ${isOver ? "drop-target" : ""}`}
     >
       {editing ? (
@@ -1996,6 +2067,52 @@ function Column({ column, cards, onOpen, onAdd, onRename, canEdit }) {
 }
 function Kanban({ board, cards, canEdit, onMove, onOpen, onAdd, onRename }) {
   const [active, setActive] = useState(null);
+  const [visibleBucket, setVisibleBucket] = useState(
+    board.columns[0]?.id || "",
+  );
+  const boardElement = useRef();
+  useEffect(() => {
+    setVisibleBucket((current) =>
+      board.columns.some((column) => column.id === current)
+        ? current
+        : board.columns[0]?.id || "",
+    );
+  }, [board.id, board.columns]);
+  function selectBucket(id) {
+    setVisibleBucket(id);
+    const container = boardElement.current;
+    const column = [...container.children].find(
+      (element) => element.dataset.bucketId === id,
+    );
+    if (!column) return;
+    const left =
+      column.getBoundingClientRect().left -
+      container.getBoundingClientRect().left +
+      container.scrollLeft -
+      parseFloat(getComputedStyle(container).paddingLeft);
+    container.scrollTo({
+      left,
+      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "instant"
+        : "smooth",
+    });
+  }
+  function scrolled() {
+    const container = boardElement.current;
+    const rect = container.getBoundingClientRect();
+    const center = rect.left + rect.width / 2;
+    let nearest,
+      distance = Infinity;
+    for (const column of container.children) {
+      const bounds = column.getBoundingClientRect(),
+        delta = Math.abs(bounds.left + bounds.width / 2 - center);
+      if (delta < distance) {
+        nearest = column.dataset.bucketId;
+        distance = delta;
+      }
+    }
+    if (nearest) setVisibleBucket(nearest);
+  }
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, {
@@ -2049,8 +2166,25 @@ function Kanban({ board, cards, canEdit, onMove, onOpen, onAdd, onRename }) {
         },
       }}
     >
+      <label className="mobile-bucket-nav">
+        {t("Bucket auswählen")}
+        <select
+          aria-label={t("Bucket auswählen")}
+          value={visibleBucket}
+          onChange={(event) => selectBucket(event.target.value)}
+        >
+          {board.columns.map((column) => (
+            <option key={column.id} value={column.id}>
+              {column.name} (
+              {cards.filter((card) => card.columnId === column.id).length})
+            </option>
+          ))}
+        </select>
+      </label>
       <div
         className="kanban-board"
+        ref={boardElement}
+        onScroll={scrolled}
         style={{ "--columns": board.columns.length }}
       >
         {board.columns.map((col) => (
@@ -2776,6 +2910,7 @@ function CardModal({
   user,
   canEdit,
   onChanged,
+  onTemplate,
   onClose,
   onSaved,
   notify,
@@ -2792,7 +2927,15 @@ function CardModal({
     checklist: c?.checklist?.map((i) => ({ ...i })) || [],
     version: c?.version ?? 0,
   });
-  const [data, setData] = useState(defaults(card)),
+  const [templateId, setTemplateId] = useState(
+    card ? "" : board.defaultTemplateId || "",
+  );
+  const standardTemplate = (board.templates || []).find(
+    (entry) => entry.id === board.defaultTemplateId,
+  );
+  const [data, setData] = useState(
+      defaults(card || templateCardFields(standardTemplate)),
+    ),
     [error, setError] = useState(""),
     [conflict, setConflict] = useState(false),
     [busy, setBusy] = useState(false),
@@ -2847,6 +2990,34 @@ function CardModal({
     setData((d) => ({ ...d, [key]: value }));
     autosave?.change(key, value, deferred);
   };
+  function applyTemplate(id) {
+    setTemplateId(id);
+    const preset = defaults(
+      templateCardFields(
+        (board.templates || []).find((entry) => entry.id === id),
+      ),
+    );
+    setData((current) => ({
+      ...current,
+      title: preset.title,
+      description: preset.description,
+      priority: preset.priority,
+      labels: preset.labels,
+      checklist: preset.checklist,
+      progress: 0,
+    }));
+  }
+  async function saveAsTemplate() {
+    if (autosave && !(await autosave.flush())) return;
+    onTemplate({
+      name: data.title.slice(0, 100),
+      title: data.title,
+      description: data.description,
+      priority: data.priority,
+      labels: bodyFields({ labels: data.labels }).labels,
+      checklist: data.checklist.map((item) => item.text),
+    });
+  }
   async function close() {
     if (!autosave || (await autosave.flush())) onClose();
   }
@@ -2874,6 +3045,7 @@ function CardModal({
     try {
       const body = {
         ...bodyFields(data),
+        ...(card ? {} : { templateId: null }),
       };
       await api(card ? `/cards/${card.id}` : `/boards/${board.id}/cards`, {
         method: card ? "PATCH" : "POST",
@@ -2987,33 +3159,62 @@ function CardModal({
           ? t("In {0}", [board.name])
           : t("Eine gute Aufgabe macht klar, was zu tun ist.")
       }
+      headerContent={
+        <div className="detail-tabs">
+          <button
+            className={tab === "details" ? "active" : ""}
+            onClick={() => setTab("details")}
+          >
+            <FileText size={15} />
+            {t("Details")}
+          </button>
+          <button
+            className={tab === "files" ? "active" : ""}
+            onClick={() => setTab("files")}
+          >
+            <Paperclip size={15} />
+            {t("Anhänge ")}
+            <span>{files.length}</span>
+          </button>
+          <button
+            className={tab === "comments" ? "active" : ""}
+            onClick={() => setTab("comments")}
+          >
+            <MessageSquare size={15} />
+            {t("Kommentare ")}
+            <span>{comments.length}</span>
+          </button>
+        </div>
+      }
       onClose={close}
     >
-      <div className="detail-tabs">
-        <button
-          className={tab === "details" ? "active" : ""}
-          onClick={() => setTab("details")}
-        >
-          <FileText size={15} />
-          {t("Details")}
-        </button>
-        <button
-          className={tab === "files" ? "active" : ""}
-          onClick={() => setTab("files")}
-        >
-          <Paperclip size={15} />
-          {t("Anhänge ")}
-          <span>{files.length}</span>
-        </button>
-        <button
-          className={tab === "comments" ? "active" : ""}
-          onClick={() => setTab("comments")}
-        >
-          <MessageSquare size={15} />
-          {t("Kommentare ")}
-          <span>{comments.length}</span>
-        </button>
-      </div>
+      {!card && (board.templates || []).length > 0 && (
+        <div className="task-template-choice">
+          <label>
+            {t("Aufgabenvorlage")}
+            <select
+              aria-label={t("Aufgabenvorlage")}
+              value={templateId}
+              onChange={(event) => applyTemplate(event.target.value)}
+            >
+              <option value="">{t("Leere Aufgabe")}</option>
+              {board.templates.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.name}
+                  {entry.id === board.defaultTemplateId
+                    ? ` · ${t("Board-Standard")}`
+                    : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="form-note">
+            {t(
+              "Die Vorlage setzt Titel, Beschreibung, Priorität, Labels und Checkliste. Du kannst alles vor dem Erstellen anpassen.",
+            )}
+          </p>
+        </div>
+      )}
       {card && canEdit && (
         <div
           className={`autosave-status autosave-${saveStatus}`}
@@ -3275,6 +3476,17 @@ function CardModal({
             {card && canEdit && (
               <button
                 type="button"
+                className="button secondary"
+                disabled={busy}
+                onClick={saveAsTemplate}
+              >
+                <Copy size={16} />
+                {t("Als Vorlage speichern")}
+              </button>
+            )}
+            {card && canEdit && (
+              <button
+                type="button"
                 className="button danger-text push-right"
                 onClick={() => setConfirmDelete(true)}
               >
@@ -3466,6 +3678,8 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [link, setLink] = useState("");
+  const [inviteEmail, setInviteEmail] = useState(""),
+    [selectedUser, setSelectedUser] = useState(null);
   const owner = project.myRole === "owner";
   const load = () =>
     owner
@@ -3544,11 +3758,31 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
       {owner && (
         <>
           <form onSubmit={invite}>
+            <InviteUserSearch
+              projectId={project.id}
+              api={api}
+              onSelect={(user) => {
+                setInviteEmail(user.email);
+                setSelectedUser(user);
+                setLink("");
+              }}
+            />
+            {selectedUser && (
+              <p className="invite-selected">
+                {t("Ausgewählt: {0}", [selectedUser.name])}
+              </p>
+            )}
             <label>
               {t("E-Mail-Adresse")}
               <input
                 name="email"
                 type="email"
+                value={inviteEmail}
+                onChange={(event) => {
+                  setInviteEmail(event.target.value);
+                  setSelectedUser(null);
+                  setLink("");
+                }}
                 required
                 placeholder="kollege@unternehmen.de"
                 maxLength={190}

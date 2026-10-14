@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { colorThemes } from "../shared/color-themes.js";
 import { projectIcons } from "../shared/project-icons.js";
 import { detectLanguage, translateMessage } from "../shared/language.js";
 const en = JSON.parse(fs.readFileSync(new URL("../shared/en.json", import.meta.url), "utf8"));
@@ -24,7 +25,7 @@ test("stored activity is localized without changing embedded bucket names", () =
   assert.equal(translateMessage("Status geändert: Kundenfreigabe [A+B]", "en", en), "Status changed: Kundenfreigabe [A+B]");
 });
 test("every static interface message has an English translation with matching placeholders", () => {
-  for (const file of ["src/main.jsx", "src/theme.jsx", "src/i18n.js"]) {
+  for (const file of ["src/main.jsx", "src/theme.jsx", "src/i18n.js", "src/templates.jsx", "src/invite-search.jsx"]) {
     const source = fs.readFileSync(new URL("../" + file, import.meta.url), "utf8");
     for (const match of source.matchAll(/\bt\(\s*("(?:\\.|[^"\\])*")/g)) {
       const key = JSON.parse(match[1]).trim();
@@ -35,6 +36,7 @@ test("every static interface message has an English translation with matching pl
   for (const label of Object.values(projectIcons)) {
     assert(Object.hasOwn(en, label), `Missing project icon translation: ${label}`);
   }
+  for (const theme of Object.values(colorThemes)) assert(Object.hasOwn(en, theme.label), `Missing theme translation: ${theme.label}`);
   for (const [key, value] of Object.entries(en)) {
     assert.deepEqual([...key.matchAll(/\{\d+\}/g)].map(m => m[0]).sort(), [...value.matchAll(/\{\d+\}/g)].map(m => m[0]).sort(), key);
   }

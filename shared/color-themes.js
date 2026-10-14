@@ -1,0 +1,42 @@
+export const colorThemes = {
+  indigo: {
+    label: "Violett",
+    color: "#5550df",
+    soft: "#eeedff",
+    dark: "#b4aaff",
+    darkSoft: "#302a50",
+    solid: "#6558dc",
+  },
+  ocean: {
+    label: "Ozeanblau",
+    color: "#185abd",
+    soft: "#e9f1ff",
+    dark: "#9ecbff",
+    darkSoft: "#213a55",
+    solid: "#2563ba",
+  },
+  forest: {
+    label: "Waldgrün",
+    color: "#146c4a",
+    soft: "#e3f4eb",
+    dark: "#92dfb7",
+    darkSoft: "#1c3c34",
+    solid: "#287654",
+  },
+  sunset: {
+    label: "Sonnenuntergang",
+    color: "#a43b12",
+    soft: "#fff0e5",
+    dark: "#ffc39b",
+    darkSoft: "#493126",
+    solid: "#ad4c27",
+  },
+  rose: {
+    label: "Rosé",
+    color: "#ad2859",
+    soft: "#fce9f1",
+    dark: "#ffb0cb",
+    darkSoft: "#472c3c",
+    solid: "#a43665",
+  },
+};

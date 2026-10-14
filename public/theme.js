@@ -12,6 +12,25 @@
       ? "dark"
       : "light";
   document.documentElement.dataset.theme = theme;
+  const colors = {
+    indigo: "#5550df",
+    ocean: "#185abd",
+    forest: "#146c4a",
+    sunset: "#a43b12",
+    rose: "#ad2859",
+  };
+  let colorTheme = "indigo";
+  try {
+    const saved = localStorage.getItem("projektwerk-color-theme");
+    if (Object.hasOwn(colors, saved)) colorTheme = saved;
+  } catch {
+    /* Storage is optional. */
+  }
+  document.documentElement.dataset.colorTheme = colorTheme;
+  document.documentElement.style.setProperty(
+    "--pwa-accent",
+    colors[colorTheme],
+  );
   document
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute("content", theme === "dark" ? "#111827" : "#fafbfc");

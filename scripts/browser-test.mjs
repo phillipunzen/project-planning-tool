@@ -559,6 +559,7 @@ try {
     .first()
     .locator(".drag-handle")
     .first();
+  await handle.evaluate(element => element.scrollIntoView({ block: "center", inline: "nearest" }));
   const from = await handle.boundingBox();
   const firstColumn = mobile.locator(".kanban-column").first(),
     secondColumn = mobile.locator(".kanban-column").nth(1);

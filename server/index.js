@@ -1,4 +1,9 @@
-import { readBranding, publicBranding, saveBranding, logoDir } from "./branding.js";
+import {
+  readBranding,
+  publicBranding,
+  saveBranding,
+  logoDir,
+} from "./branding.js";
 import {
   requestLanguage,
   translateForRequest,
@@ -6,6 +11,8 @@ import {
 } from "./language.js";
 import { projectIcons } from "../shared/project-icons.js";
 import { appManifest } from "../shared/pwa.js";
+import { colorThemes } from "../shared/color-themes.js";
+import { templateCardFields } from "../shared/task-templates.js";
 import "dotenv/config";
 import express from "express";
 import helmet from "helmet";
@@ -63,8 +70,15 @@ for (const value of (process.env.ALLOWED_ORIGINS || "").split(",")) {
   const url = new URL(value.trim());
   if (
     !["http:", "https:"].includes(url.protocol) ||
-    url.username || url.password || url.pathname !== "/" || url.search || url.hash
-  ) throw new Error("ALLOWED_ORIGINS muss vollständige HTTP(S)-Origins ohne Pfad enthalten.");
+    url.username ||
+    url.password ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash
+  )
+    throw new Error(
+      "ALLOWED_ORIGINS muss vollständige HTTP(S)-Origins ohne Pfad enthalten.",
+    );
   allowedOrigins.add(url.origin);
 }
 if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
@@ -478,8 +492,15 @@ app.patch(
   requireUser,
   api(async (req, res) => {
     const input = z
-      .object({ language: z.enum(["system", "de", "en"]) })
+      .object({
+        language: z.enum(["system", "de", "en"]).optional(),
+        theme: z.enum(Object.keys(colorThemes)).optional(),
+      })
       .strict()
+      .refine(
+        (input) => Object.keys(input).length > 0,
+        "Keine Änderungen angegeben.",
+      )
       .parse(req.body);
     await req.user.update(input);
     res.json(publicUser(req.user));
@@ -620,9 +641,7 @@ app.post(
         name,
         description: z.string().max(5000).default(""),
         color: color.default("#6366f1"),
-        icon: z
-          .enum(Object.keys(projectIcons))
-          .default("layers"),
+        icon: z.enum(Object.keys(projectIcons)).default("layers"),
       })
       .parse(req.body);
     const result = await db.transaction((t) =>
@@ -775,6 +794,36 @@ app.get(
     );
   }),
 );
+app.get(
+  "/api/projects/:id/invite-candidates",
+  api(async (req, res) => {
+    await member(req, req.params.id, false, true);
+    const query = z.string().trim().min(2).max(100).parse(req.query.q);
+    const projectMembers = await Membership.findAll({
+      where: { ProjectId: req.params.id },
+      attributes: ["UserId"],
+    });
+    const pattern = `%${query.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
+    res.json(
+      await User.findAll({
+        attributes: ["id", "name", "email", "color"],
+        where: {
+          disabled: false,
+          id: { [Op.notIn]: projectMembers.map((entry) => entry.UserId) },
+          [Op.or]: [
+            { name: { [Op.like]: pattern } },
+            { email: { [Op.like]: pattern } },
+          ],
+        },
+        order: [
+          ["name", "ASC"],
+          ["email", "ASC"],
+        ],
+        limit: 20,
+      }),
+    );
+  }),
+);
 app.post(
   "/api/projects/:id/invitations",
   api(async (req, res) => {
@@ -821,13 +870,11 @@ app.post(
         { transaction: t },
       );
     });
-    res
-      .status(201)
-      .json({
-        id: inv.id,
-        url: `${origin}/?invite=${token}`,
-        expiresAt: inv.expiresAt,
-      });
+    res.status(201).json({
+      id: inv.id,
+      url: `${origin}/?invite=${token}`,
+      expiresAt: inv.expiresAt,
+    });
   }),
 );
 app.delete(
@@ -959,6 +1006,168 @@ app.patch(
     res.json({ ok: true });
   }),
 );
+const templateInput = z
+  .object({
+    name,
+    title: z.string().trim().max(200).default(""),
+    description: z.string().max(20000).default(""),
+    priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
+    labels: z.array(z.string().trim().min(1).max(30)).max(8).default([]),
+    checklist: z.array(z.string().trim().min(1).max(300)).max(50).default([]),
+    revision: z.number().int().nonnegative(),
+    setAsDefault: z.boolean().optional(),
+  })
+  .strict();
+const templateSettings = (b) => ({
+  templates: b.templates || [],
+  defaultTemplateId: b.defaultTemplateId,
+  revision: b.templateRevision,
+});
+async function lockedTemplatesBoard(req, id, t, revision) {
+  const b = await lockedBoard(req, id, t);
+  if (b.templateRevision !== revision)
+    throw Object.assign(
+      new Error(
+        "Die Vorlagen wurden inzwischen geändert. Bitte lade den aktuellen Stand.",
+      ),
+      { status: 409 },
+    );
+  return b;
+}
+app.get(
+  "/api/boards/:id/templates",
+  api(async (req, res) => {
+    const b = await Board.findByPk(req.params.id);
+    if (!b)
+      throw Object.assign(new Error("Board nicht gefunden."), { status: 404 });
+    await member(req, b.ProjectId);
+    res.json(templateSettings(b));
+  }),
+);
+async function writeTemplate(req, res, existing) {
+  const { revision, setAsDefault, ...content } = templateInput.parse(req.body);
+  const id = existing ? uuid.parse(req.params.templateId) : randomUUID();
+  const result = await db.transaction(async (t) => {
+    const b = await lockedTemplatesBoard(req, req.params.id, t, revision);
+    const templates = b.templates || [];
+    if (existing && !templates.some((template) => template.id === id))
+      throw Object.assign(new Error("Vorlage nicht gefunden."), {
+        status: 404,
+      });
+    if (!existing && templates.length >= 20)
+      throw Object.assign(
+        new Error("Pro Board sind maximal 20 Vorlagen möglich."),
+        { status: 400 },
+      );
+    const template = { id, ...content };
+    await b.update(
+      {
+        templates: existing
+          ? templates.map((entry) => (entry.id === id ? template : entry))
+          : [...templates, template],
+        defaultTemplateId:
+          setAsDefault === true
+            ? id
+            : setAsDefault === false && b.defaultTemplateId === id
+              ? null
+              : b.defaultTemplateId,
+        templateRevision: b.templateRevision + 1,
+        revision: b.revision + 1,
+      },
+      { transaction: t },
+    );
+    await log(
+      req,
+      b,
+      existing ? "Aufgabenvorlage geändert" : "Aufgabenvorlage erstellt",
+      content.name,
+      t,
+    );
+    return templateSettings(b);
+  });
+  res.status(existing ? 200 : 201).json(result);
+}
+app.post(
+  "/api/boards/:id/templates",
+  api((req, res) => writeTemplate(req, res, false)),
+);
+app.patch(
+  "/api/boards/:id/templates/:templateId",
+  api((req, res) => writeTemplate(req, res, true)),
+);
+app.delete(
+  "/api/boards/:id/templates/:templateId",
+  api(async (req, res) => {
+    const { revision } = z
+      .object({ revision: z.number().int().nonnegative() })
+      .strict()
+      .parse(req.body);
+    const id = uuid.parse(req.params.templateId);
+    res.json(
+      await db.transaction(async (t) => {
+        const b = await lockedTemplatesBoard(req, req.params.id, t, revision);
+        const templates = b.templates || [];
+        if (!templates.some((template) => template.id === id))
+          throw Object.assign(new Error("Vorlage nicht gefunden."), {
+            status: 404,
+          });
+        await b.update(
+          {
+            templates: templates.filter((entry) => entry.id !== id),
+            defaultTemplateId:
+              b.defaultTemplateId === id ? null : b.defaultTemplateId,
+            templateRevision: b.templateRevision + 1,
+            revision: b.revision + 1,
+          },
+          { transaction: t },
+        );
+        await log(req, b, "Aufgabenvorlage entfernt", null, t);
+        return templateSettings(b);
+      }),
+    );
+  }),
+);
+app.put(
+  "/api/boards/:id/default-template",
+  api(async (req, res) => {
+    const input = z
+      .object({
+        revision: z.number().int().nonnegative(),
+        templateId: uuid.nullable(),
+      })
+      .strict()
+      .parse(req.body);
+    res.json(
+      await db.transaction(async (t) => {
+        const b = await lockedTemplatesBoard(
+          req,
+          req.params.id,
+          t,
+          input.revision,
+        );
+        if (
+          input.templateId &&
+          !(b.templates || []).some(
+            (template) => template.id === input.templateId,
+          )
+        )
+          throw Object.assign(new Error("Vorlage nicht gefunden."), {
+            status: 404,
+          });
+        await b.update(
+          {
+            defaultTemplateId: input.templateId,
+            templateRevision: b.templateRevision + 1,
+            revision: b.revision + 1,
+          },
+          { transaction: t },
+        );
+        await log(req, b, "Standardvorlage geändert", null, t);
+        return templateSettings(b);
+      }),
+    );
+  }),
+);
 const cardProgress = z.number().int().min(0).max(100).multipleOf(25);
 const cardInput = z.object({
   title: z.string().trim().min(1).max(200),
@@ -1016,9 +1225,26 @@ async function validateCardFields(b, input, t) {
 app.post(
   "/api/boards/:id/cards",
   api(async (req, res) => {
-    const input = cardInput.parse(req.body);
+    const choice = z
+      .object({ templateId: uuid.nullable().optional() })
+      .parse(req.body);
     const card = await db.transaction(async (t) => {
       const b = await lockedBoard(req, req.params.id, t);
+      const templateId =
+        choice.templateId === undefined
+          ? b.defaultTemplateId
+          : choice.templateId;
+      const template =
+        templateId &&
+        (b.templates || []).find((entry) => entry.id === templateId);
+      if (templateId && !template)
+        throw Object.assign(new Error("Vorlage nicht gefunden."), {
+          status: 400,
+        });
+      const input = cardInput.parse({
+        ...templateCardFields(template, randomUUID),
+        ...req.body,
+      });
       await validateCardFields(b, input, t);
       const max = await Card.max("position", {
         where: { BoardId: b.id, columnId: input.columnId },
@@ -1357,13 +1583,11 @@ app.post(
         await log(req, b, "Datei angehängt", c.title, t);
         return a;
       });
-      res
-        .status(201)
-        .json({
-          id: attachment.id,
-          name: attachment.name,
-          size: attachment.size,
-        });
+      res.status(201).json({
+        id: attachment.id,
+        name: attachment.name,
+        size: attachment.size,
+      });
     } catch (e) {
       await fs.unlink(req.file.path).catch(() => {});
       throw e;
@@ -1658,16 +1882,18 @@ const dist = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../dist",
 );
-app.use(express.static(dist, {
-  index: false,
-  maxAge: "1h",
-  setHeaders(res, filePath) {
-    if (path.basename(filePath) === "sw.js") {
-      res.set("Cache-Control", "no-cache");
-      res.set("Service-Worker-Allowed", "/");
-    }
-  },
-}));
+app.use(
+  express.static(dist, {
+    index: false,
+    maxAge: "1h",
+    setHeaders(res, filePath) {
+      if (path.basename(filePath) === "sw.js") {
+        res.set("Cache-Control", "no-cache");
+        res.set("Service-Worker-Allowed", "/");
+      }
+    },
+  }),
+);
 app.get("/{*path}", (req, res) => res.sendFile(path.join(dist, "index.html")));
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError)
@@ -1675,16 +1901,23 @@ app.use((err, req, res, next) => {
       error:
         err.code === "LIMIT_FILE_SIZE"
           ? translateForRequest(req, "Die Datei darf maximal 20 MB groß sein.")
-          : translateForRequest(req, "Der Upload konnte nicht verarbeitet werden."),
+          : translateForRequest(
+              req,
+              "Der Upload konnte nicht verarbeitet werden.",
+            ),
     });
   if (err instanceof z.ZodError)
     return res.status(400).json({
       error: err.issues
-        .map((i) => `${i.path.join(".")}: ${translateForRequest(req, i.message)}`)
+        .map(
+          (i) => `${i.path.join(".")}: ${translateForRequest(req, i.message)}`,
+        )
         .join("; "),
     });
   if (err instanceof UniqueConstraintError)
-    return res.status(409).json({ error: translateForRequest(req, "Dieser Eintrag existiert bereits.") });
+    return res.status(409).json({
+      error: translateForRequest(req, "Dieser Eintrag existiert bereits."),
+    });
   const status = err.status || (err.type === "entity.parse.failed" ? 400 : 500);
   if (status >= 500) console.error("Request failed:", err.name, err.message);
   res.status(status).json({

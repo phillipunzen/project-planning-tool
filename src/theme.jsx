@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { t, useLanguage } from "./i18n.js";
 import { Monitor, Moon, Sun } from "lucide-react";
 
+import { colorThemes } from "../shared/color-themes.js";
+
 const storageKey = "projektwerk-theme";
 const ThemeContext = createContext(null);
 const validPreference = (value) =>
@@ -16,6 +18,22 @@ function readPreference() {
 
 export function ThemeProvider({ children }) {
   const [preference, setPreference] = useState(readPreference);
+  const [colorTheme, setColorTheme] = useState(() => {
+    try {
+      const value = localStorage.getItem("projektwerk-color-theme");
+      return Object.hasOwn(colorThemes, value) ? value : "indigo";
+    } catch {
+      return "indigo";
+    }
+  });
+  useEffect(() => {
+    document.documentElement.dataset.colorTheme = colorTheme;
+    try {
+      localStorage.setItem("projektwerk-color-theme", colorTheme);
+    } catch {
+      /* Storage is optional. */
+    }
+  }, [colorTheme]);
   const [systemDark, setSystemDark] = useState(
     () => matchMedia("(prefers-color-scheme: dark)").matches,
   );
@@ -33,6 +51,14 @@ export function ThemeProvider({ children }) {
     const stored = (event) => {
       if (event.key === storageKey || event.key === null)
         setPreference(readPreference());
+      if (event.key === "projektwerk-color-theme" || event.key === null) {
+        try {
+          const value = localStorage.getItem("projektwerk-color-theme");
+          setColorTheme(Object.hasOwn(colorThemes, value) ? value : "indigo");
+        } catch {
+          /* Storage is optional. */
+        }
+      }
     };
     media.addEventListener("change", changed);
     window.addEventListener("storage", stored);
@@ -51,7 +77,15 @@ export function ThemeProvider({ children }) {
     }
   }
   return (
-    <ThemeContext.Provider value={{ preference, changePreference }}>
+    <ThemeContext.Provider
+      value={{
+        preference,
+        changePreference,
+        colorTheme,
+        changeColorTheme: (value) =>
+          setColorTheme(Object.hasOwn(colorThemes, value) ? value : "indigo"),
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );
@@ -76,5 +110,35 @@ export function ThemeControl({ floating = false }) {
         <option value="dark">{t("Dunkel")}</option>
       </select>
     </label>
+  );
+}
+
+export const useColorTheme = () => useContext(ThemeContext);
+export function ColorThemeChoices({ value, onChange, disabled }) {
+  useLanguage();
+  return (
+    <div
+      className="color-theme-choices"
+      role="radiogroup"
+      aria-label={t("Farbtheme")}
+    >
+      {Object.entries(colorThemes).map(([id, theme]) => (
+        <button
+          type="button"
+          role="radio"
+          aria-checked={value === id}
+          disabled={disabled}
+          key={id}
+          onClick={() => onChange(id)}
+        >
+          <span
+            className="theme-swatch"
+            style={{ background: theme.color }}
+            aria-hidden="true"
+          />
+          <span>{t(theme.label)}</span>
+        </button>
+      ))}
+    </div>
   );
 }
