@@ -594,5 +594,6 @@
   "Zu viele API-Anfragen. Bitte später erneut versuchen.": "Too many API requests. Please try again later.",
   "Token ist widerrufen": "Token revoked",
   "Board nicht mehr verfügbar": "Board no longer accessible",
-  "Wird erstellt …": "Creating …"
+  "Wird erstellt …": "Creating …",
+  "Swagger API-Dokumentation öffnen": "Open Swagger API documentation"
 }

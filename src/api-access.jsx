@@ -131,6 +131,14 @@ export function ApiAccessModal({ api, onClose }) {
       >
         {t("OpenAPI-Dokumentation öffnen")}
       </a>
+      <a
+        className="text-button swagger-docs-link"
+        href="/api/docs"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {t("Swagger API-Dokumentation öffnen")}
+      </a>
       {error && (
         <p className="form-error" role="alert">
           {t(error)}

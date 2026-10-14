@@ -4,6 +4,12 @@ Die REST-API für KI-Assistenten und Anwendungen liegt unter `/api/v1`. In **Pro
 
 Die OpenAPI-3.0.3-Spezifikation ist für angemeldete Benutzer unter `/api/integration/openapi.json` und mit API-Token unter `/api/v1/openapi.json` verfügbar. Sie beschreibt die Methoden, Datenfelder, Bearbeitungsversionen und Statuscodes und kann von KI-/API-Werkzeugen eingelesen werden.
 
+## Interaktive Swagger UI
+
+Die Swagger UI liegt unter `/api/docs` und ist nach der Anmeldung erreichbar. In **Profileinstellungen → API-Zugriff verwalten → Swagger API-Dokumentation öffnen** öffnen, über **Authorize** den API-Token ohne den Präfix „Bearer“ eintragen und einen Endpunkt mit **Try it out → Execute** ausprobieren. Die JSON-Spezifikation bleibt über die bisherigen Endpunkte verfügbar.
+
+Die Swagger-Oberfläche wird vollständig von der eigenen Installation geladen. Die Autorisierung wird nicht dauerhaft gespeichert und ist nach Neuladen der Seite erneut erforderlich. Anfragen verwenden dieselben Board-Freigaben, Schreibrechte und Versionsprüfungen wie externe API-Clients. Für Änderungen zuerst die aktuellen IDs sowie `version` oder `revision` lesen.
+
 ## Anmeldung und Berechtigungen
 
 Jede Anfrage benötigt `Authorization: Bearer <API_TOKEN>`. Keine Sitzungscookies, kein Login-Aufruf und kein `Origin`-Header nötig. Tokens gelten ausschließlich für `/api/v1`. Sie können keine Administration, Benutzerverwaltung, Einladungen oder weiteren Tokens steuern. Browser-Anfragen von anderen Webseiten werden nicht über CORS freigegeben; die API ist für serverseitige Integrationen vorgesehen. Außerhalb einer lokalen Installation HTTPS verwenden.

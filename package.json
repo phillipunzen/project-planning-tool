@@ -14,7 +14,8 @@
     "test:features": "node --env-file=.env scripts/enhancements-browser-test.mjs",
     "test:fields": "node --env-file=.env scripts/custom-fields-browser-test.mjs",
     "test:invitations": "node --env-file=.env scripts/invitations-browser-test.mjs",
-    "test:integration": "node --env-file=.env scripts/integration-browser-test.mjs"
+    "test:integration": "node --env-file=.env scripts/integration-browser-test.mjs",
+    "test:swagger": "node --env-file=.env scripts/swagger-browser-test.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -34,6 +35,7 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "sequelize": "^6.37.7",
+    "swagger-ui-dist": "5.33.2",
     "zod": "^4.1.12"
   },
   "devDependencies": {

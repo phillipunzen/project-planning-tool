@@ -2,6 +2,7 @@ import { randomBytes, createHash } from "node:crypto";
 import { z } from "zod";
 import { Op } from "sequelize";
 import { ApiToken, Board, Card, Membership, Project, User } from "./db.js";
+import { installSwaggerDocs } from "./swagger-docs.js";
 import { integrationOpenApi } from "../shared/integration-openapi.js";
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const uuid = z.uuid().transform((value) => value.toLowerCase());
@@ -143,6 +144,7 @@ export async function integrationAuth(req, res, next) {
 }
 
 export function installTokenRoutes(app, api) {
+  installSwaggerDocs(app, api);
   app.get(
     "/api/integration/openapi.json",
     api(async (req, res) => res.json(integrationOpenApi)),

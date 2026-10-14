@@ -281,6 +281,8 @@ Bestehende offene Einladungen an bereits registrierte Konten werden beim Start a
 
 ### API für KI und Integrationen
 
-In **Profileinstellungen → API-Zugriff verwalten** widerrufbare Tokens für ausgewählte Boards erstellen. Die versionierte REST-API `/api/v1` unterstützt Boards/Karten lesen, Aufgaben anlegen/bearbeiten/verschieben/löschen und Kommentare. Lesetokens sind getrennt von Schreibrechten; aktuelle Projektmitgliedschaft, Kontoaktivierung und Ablauf werden geprüft. OpenAPI-Datei sowie curl-/Python-Beispiele: [API-Dokumentation](docs/api.md). API-Tokens werden nur einmal angezeigt und ausschließlich gehasht gespeichert; die zusätzliche Tabelle wird beim Start angelegt, vorhandene Daten bleiben erhalten.
+In **Profileinstellungen → API-Zugriff verwalten** widerrufbare Tokens für ausgewählte Boards erstellen. Die versionierte REST-API `/api/v1` unterstützt Boards/Karten lesen, Aufgaben anlegen/bearbeiten/verschieben/löschen und Kommentare. Lesetokens sind getrennt von Schreibrechten; aktuelle Projektmitgliedschaft, Kontoaktivierung und Ablauf werden geprüft. Interaktive Swagger UI unter `/api/docs` (auch über die Profileinstellungen erreichbar), OpenAPI-Datei sowie curl-/Python-Beispiele: [API-Dokumentation](docs/api.md). API-Tokens werden nur einmal angezeigt und ausschließlich gehasht gespeichert; die zusätzliche Tabelle wird beim Start angelegt, vorhandene Daten bleiben erhalten.
 
 `npm run test:integration` prüft Tokenverwaltung und externe Schreibzugriffe auf Desktop und Handy. Die Datenbanktests der API sind Bestandteil von `npm test`. Alle MariaDB-Testläufe nacheinander ausführen; sie verwenden ausschließlich `projektwerk_test`.
+
+`npm run test:swagger` prüft die Swagger-Oberfläche unter Produktions-CSP, Token-Autorisierung, Lese- und Schreibaufrufe, Konflikte, Neuladen und die Handy-Darstellung. Wie die übrigen MariaDB-Tests nacheinander und ausschließlich mit `projektwerk_test` ausführen.
