@@ -155,7 +155,6 @@ const password = z
 const name = z.string().trim().min(1).max(100);
 const color = z.string().regex(/^#[0-9a-f]{6}$/i);
 const uuid = z.uuid();
-const inviteToken = z.string().regex(/^[a-f0-9]{64}$/);
 const columns = (language = "de") =>
   [
     { id: randomUUID(), name: "Offen", color: "#94a3b8", isDone: false },
@@ -292,7 +291,7 @@ app.post(
           ],
           [
             "Team zum Projekt einladen",
-            "Über „Einladen“ kannst du einen persönlichen Link erzeugen und mit deinem Team teilen.",
+            "Über „Einladen“ wählst du ein vorhandenes Benutzerkonto aus. Die Person nimmt die Einladung direkt im Tool an.",
             1,
             "high",
             ["Team"],
@@ -353,7 +352,6 @@ app.post(
         email: z.string().min(1).max(190),
         password: z.string().min(1).max(200),
         method: z.enum(["local", "ldap"]).default("local"),
-        invite: z.string().optional(),
       })
       .parse(req.body);
     let user;
@@ -367,7 +365,6 @@ app.post(
       try {
         user = await resolveExternalUser(
           await ldapIdentity(c, input.email, input.password),
-          input.invite,
         );
       } catch (e) {
         if (e.status) throw e;
@@ -410,14 +407,10 @@ app.get(
     const verifier = oidc.randomPKCECodeVerifier(),
       state = oidc.randomState(),
       nonce = oidc.randomNonce();
-    const token = req.query.invite
-      ? inviteToken.parse(req.query.invite)
-      : undefined;
     req.session.oidc = {
       verifier,
       state,
       nonce,
-      invite: token,
       created: Date.now(),
       issuer: c.oidc.issuer,
       clientId: c.oidc.clientId,
@@ -468,20 +461,17 @@ app.get(
         throw new Error(
           "Der Anbieter muss eine verifizierte E-Mail-Adresse liefern.",
         );
-      const user = await resolveExternalUser(
-        {
-          email: email.parse(claims.email),
-          name:
-            typeof claims.name === "string"
-              ? claims.name.slice(0, 100)
-              : claims.email,
-          externalId: hashToken(`oidc:${claims.iss}:${claims.sub}`),
-          authType: "oidc",
-        },
-        flow.invite,
-      );
+      const user = await resolveExternalUser({
+        email: email.parse(claims.email),
+        name:
+          typeof claims.name === "string"
+            ? claims.name.slice(0, 100)
+            : claims.email,
+        externalId: hashToken(`oidc:${claims.iss}:${claims.sub}`),
+        authType: "oidc",
+      });
       await loginSession(req, user);
-      res.redirect(flow.invite ? `/?invite=${flow.invite}` : "/");
+      res.redirect("/");
     } catch (e) {
       res.redirect(
         `/?authError=${encodeURIComponent(e.status ? e.message : "SSO-Anmeldung fehlgeschlagen. Bitte prüfe die Konfiguration oder starte die Anmeldung erneut.")}`,
@@ -519,110 +509,88 @@ app.post(
     res.json({ ok: true });
   }),
 );
-app.get(
-  "/api/invitations/:token",
-  api(async (req, res) => {
-    const token = inviteToken.parse(req.params.token);
-    const invitation = await Invitation.findOne({
-      where: {
-        tokenHash: hashToken(token),
-        acceptedAt: null,
-        expiresAt: { [Op.gt]: new Date() },
-      },
-      include: Project,
-    });
-    if (!invitation)
-      throw Object.assign(
-        new Error(
-          "Diese Einladung ist abgelaufen oder wurde bereits verwendet.",
-        ),
-        { status: 404 },
-      );
-    res.json({
-      email: invitation.email,
-      role: invitation.role,
-      project: invitation.Project.name,
-      expiresAt: invitation.expiresAt,
-    });
-  }),
-);
-app.post(
-  "/api/invitations/:token/accept",
-  api(async (req, res) => {
-    checkLoginTransport(req);
-    const token = inviteToken.parse(req.params.token);
-    const input = z
-      .object({ name: name.optional(), password: password.optional() })
-      .parse(req.body);
-    const user = await db.transaction(async (t) => {
-      await Setting.findByPk("installation", {
-        transaction: t,
-        lock: t.LOCK.UPDATE,
-      });
-      const inv = await Invitation.findOne({
-        where: {
-          tokenHash: hashToken(token),
-          acceptedAt: null,
-          expiresAt: { [Op.gt]: new Date() },
-        },
-        transaction: t,
-        lock: t.LOCK.UPDATE,
-      });
-      if (!inv)
-        throw Object.assign(new Error("Einladung nicht mehr gültig."), {
-          status: 404,
-        });
-      let u =
-        req.session.userId &&
-        (await User.findByPk(req.session.userId, { transaction: t }));
-      if (u) {
-        if (u.disabled || u.email !== inv.email)
-          throw Object.assign(
-            new Error("Melde dich mit dem eingeladenen Konto an."),
-            { status: 403 },
-          );
-      } else {
-        if (await User.findOne({ where: { email: inv.email }, transaction: t }))
-          throw Object.assign(
-            new Error(
-              "Für diese E-Mail existiert bereits ein Konto. Bitte zuerst anmelden.",
-            ),
-            { status: 409 },
-          );
-        if (!input.name || !input.password)
-          throw Object.assign(new Error("Name und Passwort erforderlich."), {
-            status: 400,
-          });
-        u = await User.create(
-          {
-            name: input.name,
-            email: inv.email,
-            password: await bcrypt.hash(input.password, 12),
-          },
-          { transaction: t },
-        );
-      }
-      await Membership.findOrCreate({
-        where: { ProjectId: inv.ProjectId, UserId: u.id },
-        defaults: { role: inv.role },
-        transaction: t,
-      });
-      await inv.update({ acceptedAt: new Date() }, { transaction: t });
-      return u;
-    });
-    await loginSession(req, user);
-    res.json(publicUser(user));
-  }),
-);
 app.use("/api", (req, res, next) => {
   if (
     ["/health", "/public", "/setup"].includes(req.path) ||
-    req.path.startsWith("/auth/") ||
-    req.path.startsWith("/invitations/")
+    req.path.startsWith("/auth/")
   )
     return next();
   requireUser(req, res, next);
 });
+const pendingInvitation = () => ({
+  acceptedAt: null,
+  expiresAt: { [Op.gt]: new Date() },
+});
+app.get(
+  "/api/invitations",
+  api(async (req, res) => {
+    const entries = await Invitation.findAll({
+      where: { recipientId: req.user.id, ...pendingInvitation() },
+      attributes: ["id", "role", "expiresAt"],
+      include: [
+        {
+          model: Project,
+          attributes: ["id", "name", "color", "icon"],
+          where: { archived: false },
+        },
+        { model: User, as: "inviter", attributes: ["id", "name"] },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+    res.json(
+      entries.map((entry) => ({
+        id: entry.id,
+        role: entry.role,
+        expiresAt: entry.expiresAt,
+        project: entry.Project,
+        inviter: entry.inviter,
+      })),
+    );
+  }),
+);
+async function decideInvitation(req, res, accept) {
+  const id = uuid.parse(req.params.id);
+  const initial = await Invitation.findOne({
+    where: { id, recipientId: req.user.id, ...pendingInvitation() },
+  });
+  if (!initial)
+    throw Object.assign(new Error("Einladung nicht mehr gültig."), {
+      status: 404,
+    });
+  const projectId = await db.transaction(async (t) => {
+    const project = await Project.findByPk(initial.ProjectId, {
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+    const invitation = await Invitation.findOne({
+      where: { id, recipientId: req.user.id, ...pendingInvitation() },
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+    if (!project || project.archived || !invitation)
+      throw Object.assign(new Error("Einladung nicht mehr gültig."), {
+        status: 404,
+      });
+    if (accept) {
+      await Membership.findOrCreate({
+        where: { ProjectId: project.id, UserId: req.user.id },
+        defaults: { role: invitation.role },
+        transaction: t,
+      });
+      await invitation.update({ acceptedAt: new Date() }, { transaction: t });
+    } else await invitation.destroy({ transaction: t });
+    return project.id;
+  });
+  res.json({ ok: true, projectId });
+}
+app.post(
+  "/api/invitations/:id/accept",
+  api((req, res) => decideInvitation(req, res, true)),
+);
+app.post(
+  "/api/invitations/:id/decline",
+  api((req, res) => decideInvitation(req, res, false)),
+);
 app.get(
   "/api/projects",
   api(async (req, res) => {
@@ -791,7 +759,15 @@ app.get(
           acceptedAt: null,
           expiresAt: { [Op.gt]: new Date() },
         },
-        attributes: ["id", "email", "role", "expiresAt"],
+        attributes: ["id", "role", "expiresAt"],
+        include: [
+          {
+            model: User,
+            as: "recipient",
+            attributes: ["id", "name"],
+            required: false,
+          },
+        ],
         order: [["createdAt", "DESC"]],
       }),
     );
@@ -806,13 +782,21 @@ app.get(
       where: { ProjectId: req.params.id },
       attributes: ["UserId"],
     });
+    const pending = await Invitation.findAll({
+      where: { ProjectId: req.params.id, ...pendingInvitation() },
+      attributes: ["recipientId"],
+    });
+    const excluded = [
+      ...projectMembers.map((entry) => entry.UserId),
+      ...pending.map((entry) => entry.recipientId).filter(Boolean),
+    ];
     const pattern = `%${query.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
     res.json(
       await User.findAll({
         attributes: ["id", "name", "email", "color"],
         where: {
           disabled: false,
-          id: { [Op.notIn]: projectMembers.map((entry) => entry.UserId) },
+          id: { [Op.notIn]: excluded },
           [Op.or]: [
             { name: { [Op.like]: pattern } },
             { email: { [Op.like]: pattern } },
@@ -831,53 +815,68 @@ app.post(
   "/api/projects/:id/invitations",
   api(async (req, res) => {
     const input = z
-      .object({ email, role: z.enum(["editor", "viewer"]).default("editor") })
+      .object({
+        userId: uuid,
+        role: z.enum(["editor", "viewer"]).default("editor"),
+      })
+      .strict()
       .parse(req.body);
-    const token = randomBytes(32).toString("hex");
     const inv = await db.transaction(async (t) => {
-      await Project.findByPk(req.params.id, {
+      const project = await Project.findByPk(req.params.id, {
         transaction: t,
         lock: t.LOCK.UPDATE,
       });
       await member(req, req.params.id, false, true, t);
-      const user = await User.findOne({
-        where: { email: input.email },
-        transaction: t,
-      });
+      if (project.archived)
+        throw Object.assign(
+          new Error("Archivierte Projekte können keine Einladungen erhalten."),
+          { status: 400 },
+        );
+      const user = await User.findByPk(input.userId, { transaction: t });
+      if (!user || user.disabled)
+        throw Object.assign(new Error("Wähle ein aktives Benutzerkonto aus."), {
+          status: 400,
+        });
       if (
-        user &&
-        (await Membership.findOne({
-          where: { ProjectId: req.params.id, UserId: user.id },
+        await Membership.findOne({
+          where: { ProjectId: project.id, UserId: user.id },
           transaction: t,
-        }))
+        })
       )
         throw Object.assign(
           new Error("Diese Person ist bereits Projektmitglied."),
           { status: 409 },
         );
-      await Invitation.destroy({
-        where: {
-          ProjectId: req.params.id,
-          email: input.email,
-          acceptedAt: null,
-        },
-        transaction: t,
-      });
+      if (
+        await Invitation.findOne({
+          where: {
+            ProjectId: project.id,
+            recipientId: user.id,
+            ...pendingInvitation(),
+          },
+          transaction: t,
+        })
+      )
+        throw Object.assign(
+          new Error("Diese Person hat bereits eine offene Einladung."),
+          { status: 409 },
+        );
       return Invitation.create(
         {
-          ...input,
-          ProjectId: req.params.id,
-          tokenHash: hashToken(token),
+          email: user.email,
+          role: input.role,
+          recipientId: user.id,
+          inviterId: req.user.id,
+          ProjectId: project.id,
+          tokenHash: hashToken(randomBytes(32).toString("hex")),
           expiresAt: new Date(Date.now() + 7 * 86400000),
         },
         { transaction: t },
       );
     });
-    res.status(201).json({
-      id: inv.id,
-      url: `${origin}/?invite=${token}`,
-      expiresAt: inv.expiresAt,
-    });
+    res
+      .status(201)
+      .json({ id: inv.id, role: inv.role, expiresAt: inv.expiresAt });
   }),
 );
 app.delete(

@@ -97,12 +97,12 @@ try {
         const invitation = await admin.call(
           `/projects/${project.id}/invitations`,
           "POST",
-          { email: user.email, role },
+          { userId: user.id, role },
         );
         assert.equal(
           (
             await actor.call(
-              `/invitations/${new URL(invitation.data.url).searchParams.get("invite")}/accept`,
+              `/invitations/${invitation.data.id}/accept`,
               "POST",
               {},
             )

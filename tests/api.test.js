@@ -197,64 +197,82 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
       password: "EditorPw1!",
     });
   });
-  await t.test(
-    "invitations bind membership to the invited email and expire after acceptance",
-    async () => {
-      const invitation = await admin.call(
-        `/projects/${project.id}/invitations`,
-        "POST",
-        { email: editorUser.email, role: "editor" },
-      );
-      assert.equal(invitation.status, 201);
-      const token = new URL(invitation.data.url).searchParams.get("invite");
-      assert.equal(
-        (await outsider.call(`/invitations/${token}`)).data.email,
-        editorUser.email,
-      );
-      assert.equal(
-        (await admin.call(`/invitations/${token}/accept`, "POST", {})).status,
-        403,
-      );
-      assert.equal(
-        (await editor.call(`/invitations/${token}/accept`, "POST", {})).status,
-        200,
-      );
-      assert.equal(
-        (await editor.call(`/invitations/${token}/accept`, "POST", {})).status,
-        404,
-      );
-      const r = await admin.call(
-        `/projects/${project.id}/invitations`,
-        "POST",
-        { email: "viewer@test.example", role: "viewer" },
-      );
-      const viewerToken = new URL(r.data.url).searchParams.get("invite");
-      assert.equal((await viewer.call(`/invitations/${viewerToken}/accept`, "POST", {
-        name: "Viewer", password: "123456789",
-      })).status, 400);
-      const accepted = await viewer.call(
-        `/invitations/${viewerToken}/accept`,
-        "POST",
-        { name: "Viewer", password: "ViewerPw1!" },
-      );
-      assert.equal(accepted.status, 200);
-      viewerUser = accepted.data;
-      const expired = await admin.call(
-        `/projects/${project.id}/invitations`,
-        "POST",
-        { email: "expired@test.example", role: "editor" },
-      );
-      const expiredToken = new URL(expired.data.url).searchParams.get("invite");
-      await Invitation.update(
-        { expiresAt: new Date(Date.now() - 1000) },
-        { where: { id: expired.data.id } },
-      );
-      assert.equal(
-        (await outsider.call(`/invitations/${expiredToken}`)).status,
-        404,
-      );
-    },
-  );
+  await t.test("UI invitations are account-bound and single-use", async () => {
+    const invitation = await admin.call(
+      `/projects/${project.id}/invitations`,
+      "POST",
+      { userId: editorUser.id, role: "editor" },
+    );
+    assert.equal(invitation.status, 201);
+    assert.equal(invitation.data.url, undefined);
+    const id = invitation.data.id;
+    assert.equal((await outsider.call("/invitations")).status, 401);
+    assert.equal(
+      (await admin.call(`/invitations/${id}/accept`, "POST", {})).status,
+      404,
+    );
+    assert.equal((await editor.call("/invitations")).data[0].id, id);
+    assert.equal(
+      (await editor.call(`/invitations/${id}/accept`, "POST", {})).status,
+      200,
+    );
+    assert.equal(
+      (await editor.call(`/invitations/${id}/accept`, "POST", {})).status,
+      404,
+    );
+    viewerUser = (
+      await admin.call("/admin/users", "POST", {
+        name: "Viewer",
+        email: "viewer@test.example",
+        password: "ViewerPw1!",
+      })
+    ).data;
+    await viewer.call("/auth/login", "POST", {
+      email: viewerUser.email,
+      password: "ViewerPw1!",
+    });
+    const r = await admin.call(`/projects/${project.id}/invitations`, "POST", {
+      userId: viewerUser.id,
+      role: "viewer",
+    });
+    assert.equal(
+      (await viewer.call(`/invitations/${r.data.id}/accept`, "POST", {}))
+        .status,
+      200,
+    );
+    const expiredUser = (
+      await admin.call("/admin/users", "POST", {
+        name: "Expired",
+        email: "expired@test.example",
+        password: "ExpiredPassword123!",
+      })
+    ).data;
+    const expired = await admin.call(
+      `/projects/${project.id}/invitations`,
+      "POST",
+      { userId: expiredUser.id },
+    );
+    await Invitation.update(
+      { expiresAt: new Date(Date.now() - 1000) },
+      { where: { id: expired.data.id } },
+    );
+    const expiredClient = client();
+    await expiredClient.call("/auth/login", "POST", {
+      email: expiredUser.email,
+      password: "ExpiredPassword123!",
+    });
+    assert.deepEqual((await expiredClient.call("/invitations")).data, []);
+    assert.equal(
+      (
+        await expiredClient.call(
+          `/invitations/${expired.data.id}/accept`,
+          "POST",
+          {},
+        )
+      ).status,
+      404,
+    );
+  });
   await t.test(
     "existing cards receive zero progress without losing data during migration",
     async () => {
@@ -479,7 +497,7 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
       assert.equal(
         (
           await editor.call(`/projects/${project.id}/invitations`, "POST", {
-            email: "illegal@test.example",
+            userId: editorUser.id,
           })
         ).status,
         403,

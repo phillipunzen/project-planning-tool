@@ -7,7 +7,7 @@ Repository: [phillipunzen/project-planning-tool](https://github.com/phillipunzen
 ## Funktionen
 
 - Handy-Bedienung mit Bucket-Auswahl, größeren Touch-Flächen, 16-Pixel-Eingabefeldern und einem bildschirmfüllenden Aufgabendialog. Statusänderungen sind auch ohne Drag-and-drop über die Kartendetails möglich.
-- Einladungen: Projekteigentümer suchen bereits registrierte, aktive Benutzer nach Anzeigename oder E-Mail-Adresse. Bereits vorhandene Projektmitglieder werden ausgeblendet. Neue Personen weiterhin direkt über ihre E-Mail-Adresse einladen; der Einladungslink wird persönlich geteilt.
+- Einladungen direkt im Tool: Projekteigentümer wählen registrierte, aktive Benutzer über die Suche nach Anzeigename oder Kontoadresse aus und vergeben die Rolle Bearbeiter/Betrachter. Bereits vorhandene Mitglieder und offene Einladungen werden ausgeblendet. Empfänger sehen einen Zähler oben in der Oberfläche und nehmen die Einladung im Bereich „Einladungen“ an oder lehnen sie ab. Neue lokale Konten legt ein Admin an; Benutzer der konfigurierten Firmenanmeldung melden sich einmal an, bevor sie eingeladen werden können.
 - Persönliche Farbthemes unter „Profileinstellungen“: Violett, Ozeanblau, Waldgrün, Sonnenuntergang und Rosé. Die Wahl wird im Benutzerprofil gespeichert und beim nächsten Öffnen/Anmelden auf anderen Geräten übernommen. Hell-/Dunkelmodus bleibt separat wählbar.
 - Gemeinsame Aufgabenvorlagen pro Kanban-Board: bis zu 20 Vorlagen mit Titel, Beschreibung, Priorität, Labels und Checkliste. Bearbeiter verwalten Vorlagen und wählen einen gemeinsamen Board-Standard. Neue Karten erhalten diesen Standard; alternativ eine andere Vorlage oder eine leere Aufgabe wählen. „Als Vorlage speichern“ übernimmt den Inhalt einer bestehenden Karte. Checklisten erhalten neue IDs und offene Häkchen, Fortschritt startet bei 0%; Termine, Zuweisungen, Anhänge und Kommentare werden nicht kopiert. Bestehende Karten bleiben beim Ändern/Löschen einer Vorlage erhalten.
 - Eigene Vorlagenfelder: bis zu 20 Text-, Zahlen-, Datums- oder Dropdown-Felder je Vorlage; Dropdowns mit bis zu 50 Optionen. Aufgaben sind mit ihrer Vorlage verknüpft: neue Felder, Feldnamen und Auswahloptionen sind auch in bestehenden Aufgaben verfügbar (in geöffneten Dialogen spätestens nach 5 Sekunden). Die Werte werden pro Aufgabe gespeichert, Auswahlen sofort und Texte nach Schreibpause oder Verlassen des Felds. Bestehende Aufgaben ohne Vorlage können eine Vorlage für eigene Felder zugewiesen bekommen, ohne ihren Inhalt zu überschreiben. Entfernte Felder/ausgewählte Optionen bleiben als Historie sichtbar, gelöschte Vorlagen hinterlassen lesbare Feldwerte. Änderungen an Titel, Beschreibung und Checkliste einer Vorlage gelten weiterhin nur für neue Aufgaben.
@@ -29,7 +29,7 @@ Repository: [phillipunzen/project-planning-tool](https://github.com/phillipunzen
 - Kommentare als Statusupdates und chronologischer Änderungsverlauf pro Board.
 - Kanban-, Listenansicht, Suche, Prioritätsfilter und persönliche Aufgabenübersicht.
 - Projekteigentümer, Bearbeiter und Leser. Administrationsrechte gewähren keinen automatischen Zugriff auf fremde Projekte.
-- Persönliche Einladungslinks, die an eine E-Mail-Adresse gebunden sind und 7 Tage gelten. Keine automatische E-Mail-Zustellung.
+- Konto-gebundene Projekteinladungen in der Oberfläche, 7 Tage gültig, mit Annahme, Ablehnung und Rücknahme. Es gibt keinen Versand von E-Mails und keine Einladungslinks.
 - Administration für lokale Konten, Microsoft Active Directory über LDAPS/StartTLS oder OpenID Connect (z. B. Microsoft Entra ID, Keycloak).
 - Gemeinsame MariaDB-Daten, Synchronisierung alle 5 Sekunden und Konflikterkennung bei gleichzeitigen Kartenänderungen.
 
@@ -138,7 +138,7 @@ Anschließend `docker compose up -d` ausführen. HTTPS kann über einen vorhande
 
 ### Anmeldung ohne dauerhafte Sitzung
 
-Die Oberfläche bestätigt nach Einrichtung, Anmeldung und Einladungsannahme die Sitzung über `/api/me`. Fehlt das Sitzungscookie, bleibt eine sichtbare Fehlermeldung stehen. Nach einer bereits erfolgreichen Kontoerstellung kann die Anmeldung erneut versucht werden; das Konto muss nicht noch einmal erstellt werden.
+Die Oberfläche bestätigt nach Einrichtung und Anmeldung die Sitzung über `/api/me`. Einladungen werden ausschließlich von bereits angemeldeten Konten angenommen. Fehlt das Sitzungscookie, bleibt eine sichtbare Fehlermeldung stehen. Nach einer bereits erfolgreichen Kontoerstellung kann die Anmeldung erneut versucht werden; das Konto muss nicht noch einmal erstellt werden.
 
 Bei HTTP-Zugriff muss `APP_URL` ebenfalls mit `http://` beginnen. Bei HTTPS hinter einem Reverse Proxy die tatsächliche HTTPS-Adresse als `APP_URL` und `TRUST_PROXY=1` für einen vorgeschalteten Proxy setzen; dieser muss `X-Forwarded-Proto: https` weitergeben. Eine HTTPS-Konfiguration ohne erkannte sichere Verbindung wird vor der Kontoerstellung oder Anmeldung mit einer verständlichen Fehlermeldung abgelehnt. Sichere Cookies werden dabei nicht abgeschaltet. Im Browser Cookies für die verwendete Website zulassen. Nach einer ENV-Änderung `docker compose up -d --wait app` ausführen.
 
@@ -150,7 +150,7 @@ Wenn eine lokale Vorschau einen anderen Port verwendet, ihre genaue Origin zusä
 ALLOWED_ORIGINS=http://localhost:54734
 ```
 
-Mehrere Adressen mit Komma trennen. Anschließend `docker compose up -d app` ausführen. Wildcards, fremde Webseiten und automatisch übernommene Forwarded-Host-Header werden nicht freigegeben. `APP_URL` bleibt die feste Hauptadresse für Einladungslinks und SSO-Redirects; bei Firmenanmeldung diese Hauptadresse verwenden. Die aktuelle Vorschauadresse dieser Arbeitsumgebung ist bereits zusätzlich konfiguriert.
+Mehrere Adressen mit Komma trennen. Anschließend `docker compose up -d app` ausführen. Wildcards, fremde Webseiten und automatisch übernommene Forwarded-Host-Header werden nicht freigegeben. `APP_URL` bleibt die feste Hauptadresse für SSO-Redirects; bei Firmenanmeldung diese Hauptadresse verwenden. Die aktuelle Vorschauadresse dieser Arbeitsumgebung ist bereits zusätzlich konfiguriert.
 
 ## Installation als PWA
 
@@ -192,11 +192,11 @@ Unter **Administration → Anmeldung → Active Directory** konfigurieren:
 - Bind-Passwort des Servicekontos.
 - Benutzersuchfilter: standardmäßig `(&(objectClass=user)(sAMAccountName={username}))`.
 
-Die Anmeldung prüft zuerst das Verzeichnis mit dem Servicekonto, anschließend das Passwort per Bind als Benutzer. Das `mail`-Attribut muss gesetzt sein; deaktivierte AD-Konten werden abgelehnt. Erstmalige Benutzer benötigen eine passende Projekteinladung. `{username}` wird als LDAP-Filterwert maskiert.
+Die Anmeldung prüft zuerst das Verzeichnis mit dem Servicekonto, anschließend das Passwort per Bind als Benutzer. Das `mail`-Attribut muss gesetzt sein; deaktivierte AD-Konten werden abgelehnt. Erstmalige Benutzer werden als normale Konten ohne Zugriff auf vorhandene Projekte angelegt; Projekteinladungen werden anschließend im Tool angenommen. `{username}` wird als LDAP-Filterwert maskiert.
 
 Serverzertifikate werden validiert. Für eine interne CA das PEM-Zertifikat lesbar in den Container mounten und `NODE_EXTRA_CA_CERTS=/app/certs/firma-ca.pem` als Umgebungsvariable ergänzen. Keine Abschaltung der Zertifikatsprüfung.
 
-Der Verbindungstest prüft beim OIDC-Anbieter die Discovery; bei LDAP TLS-Verbindung, Service-Bind und Base-DN. Die tatsächlichen Unternehmensanbieter müssen anschließend mit einem Testbenutzer geprüft werden; bei LDAP ist dafür eine passende Einladung erforderlich. Es wurden hier keine Unternehmenszugangsdaten oder realen Tenant-/AD-Verbindungen bereitgestellt.
+Der Verbindungstest prüft beim OIDC-Anbieter die Discovery; bei LDAP TLS-Verbindung, Service-Bind und Base-DN. Die tatsächlichen Unternehmensanbieter müssen anschließend mit einem Testbenutzer geprüft werden. Die erste erfolgreiche LDAP-Anmeldung legt ein normales Konto an. Es wurden hier keine Unternehmenszugangsdaten oder realen Tenant-/AD-Verbindungen bereitgestellt.
 
 ## Daten und Betrieb
 
@@ -272,3 +272,9 @@ Die zusätzlichen Benutzer- und Board-Felder für Farbthemes und Vorlagen werden
 `npm run test:fields` prüft die Feldverwaltung, Dropdown-Erweiterungen in geöffneten Aufgaben, Auto-Speicherung, historische Werte und die Handy-Ansicht.
 
 `npm run test:features` prüft Benutzersuche und Einladung, gemeinsame Board-Vorlagen für zwei Konten, unabhängige Checklisten, Konfliktentwürfe, persönliche Themes und die Handy-Bedienung. Nach `npm run build` mit derselben Datenbankverbindung wie `test:ui` ausführen. Alle Tests mit MariaDB nacheinander ausführen; sie setzen ausschließlich `projektwerk_test` zurück. Die neuen API-Prüfungen sind Bestandteil von `npm test` und prüfen auch die Übernahme bestehender Daten bei der Schemaerweiterung.
+
+### Einladungen in der Oberfläche
+
+Bestehende offene Einladungen an bereits registrierte Konten werden beim Start additiv mit dem passenden Konto verknüpft und erscheinen im Einladungsbereich. Einladungen an noch nicht vorhandene Konten können nicht mehr über einen Link angenommen werden: zuerst das Konto als Admin anlegen oder einmal die Firmenanmeldung verwenden, danach im Tool einladen. Kontoadressen bleiben Anmelde-/Identitätsmerkmale; das Tool verwendet sie nicht für E-Mail-Zustellung. Neue Einladungen beziehen sich auf die feste Benutzer-ID, auch wenn sich später die Kontoadresse ändert. `/api/projects/:id/invitations` erwartet `userId` und eine optionale Rolle; `/api/invitations` liefert nur eigene offene Einladungen, Annahme/Ablehnung erfolgen über die Einladungs-ID und eine bestehende Sitzung.
+
+`npm run test:invitations` prüft Einladungen auf Desktop und Handy, die Annahme aus einem bereits geöffneten Konto, Ablehnung, Rücknahme und die Übersetzungen. Wie alle MariaDB-Tests ausschließlich `projektwerk_test` verwenden und die Tests nacheinander ausführen.

@@ -74,14 +74,17 @@ try {
     .getByRole("combobox", { name: "Name oder E-Mail suchen", exact: true })
     .press("Enter");
   await expect(
-    page.locator("dialog").getByLabel("E-Mail-Adresse", { exact: true }),
-  ).toHaveValue(candidate.email);
+    page.getByText("Ausgewählt: Jamie Muster", { exact: true }),
+  ).toBeVisible();
   await page
-    .getByRole("button", { name: "Einladungslink erstellen", exact: true })
+    .getByRole("button", { name: "Benutzer einladen", exact: true })
     .click();
-  const invite = await page
-    .getByLabel("Einladungslink", { exact: true })
-    .inputValue();
+  await expect(
+    page.getByText("Einladung im Tool erstellt", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Einladungslink", { exact: true })).toHaveCount(
+    0,
+  );
   await close(page);
   const guestContext = await browser.newContext({
     locale: "en-GB",
@@ -89,24 +92,17 @@ try {
   });
   const guest = await guestContext.newPage();
   watch(guest);
-  await guest.goto(invite);
-  await guest
-    .getByRole("button", {
-      name: "Already have an account or company login? Sign in",
-      exact: true,
-    })
-    .click();
+  await guest.goto(base);
   await guest
     .getByLabel("Email address", { exact: true })
     .fill(candidate.email);
   await guest.getByLabel("Password", { exact: true }).fill(password);
   await guest.getByRole("button", { name: "Sign in", exact: true }).click();
-  await guest
-    .getByRole("button", { name: "Join project", exact: true })
-    .click();
+  await guest.getByRole("button", { name: "Invitations", exact: true }).click();
+  await guest.getByRole("button", { name: "Accept", exact: true }).click();
   await expect(guest.locator(".task-card")).toHaveCount(6);
   console.log(
-    "PASS: Display-name search, keyboard choice, email selection and invitation of an existing user",
+    "PASS: Display-name search, keyboard choice and UI invitation of an existing user",
   );
 
   await page

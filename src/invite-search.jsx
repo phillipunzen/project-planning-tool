@@ -122,7 +122,7 @@ export function InviteUserSearch({ projectId, api, onSelect }) {
       {!busy && query.trim().length >= 2 && !results.length && !error && (
         <p className="form-note">
           {t(
-            "Keine passenden registrierten Benutzer gefunden. Neue Personen kannst du über ihre E-Mail-Adresse einladen.",
+            "Keine passenden Benutzer gefunden. Neue lokale Konten legt ein Admin an; bei Firmenanmeldung genügt die erste Anmeldung.",
           )}
         </p>
       )}

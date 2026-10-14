@@ -91,9 +91,21 @@ export const Invitation = db.define("Invitation", {
   tokenHash: { type: D.STRING(64), allowNull: false, unique: true },
   expiresAt: { type: D.DATE, allowNull: false },
   acceptedAt: D.DATE,
+  recipientId: D.UUID,
+  inviterId: D.UUID,
 });
 Project.hasMany(Invitation, { onDelete: "CASCADE" });
 Invitation.belongsTo(Project);
+Invitation.belongsTo(User, {
+  foreignKey: "recipientId",
+  as: "recipient",
+  onDelete: "CASCADE",
+});
+Invitation.belongsTo(User, {
+  foreignKey: "inviterId",
+  as: "inviter",
+  onDelete: "SET NULL",
+});
 export const Setting = db.define("Setting", {
   key: { type: D.STRING(100), primaryKey: true },
   value: { type: D.TEXT, allowNull: false },
@@ -196,6 +208,18 @@ export async function initializeDatabase() {
       allowNull: false,
       defaultValue: 0,
     });
+  const invitations = await db.getQueryInterface().describeTable("Invitations");
+  for (const key of ["recipientId", "inviterId"]) {
+    if (!invitations[key])
+      await db
+        .getQueryInterface()
+        .addColumn("Invitations", key, { type: D.UUID, allowNull: true });
+  }
+  // Existing invitations to registered accounts appear in their inbox after upgrade.
+  await db.query(
+    "UPDATE `Invitations` i INNER JOIN `Users` u ON i.email = u.email SET i.recipientId = u.id WHERE i.recipientId IS NULL",
+    { type: "UPDATE" },
+  );
   const schema = await db.getQueryInterface().describeTable("Cards");
   if (!schema.checklist)
     await db

@@ -128,7 +128,7 @@ globalThis.fetch = async (input, init) => {
 const admin = client();
 let pid, invite;
 await test("OIDC authorization code flow and directory identity", async (t) => {
-  await t.test("prepare local admin and invited external user", async () => {
+  await t.test("prepare local admin and configured OIDC provider", async () => {
     assert.equal(
       (
         await admin.call("/setup", "POST", {
@@ -142,10 +142,7 @@ await test("OIDC authorization code flow and directory identity", async (t) => {
     );
     pid = (await admin.call("/projects", "POST", { name: "Identity Test" }))
       .data.id;
-    const result = await admin.call(`/projects/${pid}/invitations`, "POST", {
-      email: "external@test.example",
-    });
-    invite = new URL(result.data.url).searchParams.get("invite");
+    invite = "a".repeat(64); // Legacy query parameters never affect sign-in or membership.
     assert.equal(
       (
         await admin.call("/admin/auth", "PUT", {
@@ -308,16 +305,22 @@ await test("OIDC authorization code flow and directory identity", async (t) => {
     },
   );
   await t.test(
-    "OIDC sign-in with project invitation keeps the invitation flow available",
+    "OIDC sign-in then UI invitation provides explicit project access",
     async () => {
       const c = client();
       const result = await finish(c, await start(c, invite));
-      assert.equal(result.location, `/?invite=${invite}`);
+      assert.equal(result.location, "/");
       const me = await c.call("/me");
       assert.equal(me.data.authType, "oidc");
       assert.equal(me.data.email, "external@test.example");
+      const invitation = await admin.call(
+        `/projects/${pid}/invitations`,
+        "POST",
+        { userId: me.data.id },
+      );
       assert.equal(
-        (await c.call(`/invitations/${invite}/accept`, "POST", {})).status,
+        (await c.call(`/invitations/${invitation.data.id}/accept`, "POST", {}))
+          .status,
         200,
       );
       assert.equal((await c.call("/projects")).data.length, 2);
@@ -325,7 +328,7 @@ await test("OIDC authorization code flow and directory identity", async (t) => {
         await User.count({ where: { email: "external@test.example" } }),
         1,
       );
-      assert.match(result.location, /invite/);
+      assert.equal(result.location, "/");
     },
   );
   await t.test(
@@ -426,27 +429,26 @@ await test("OIDC authorization code flow and directory identity", async (t) => {
               password: "user-password",
             })
           ).status,
-          403,
-        );
-        const link = await admin.call(`/projects/${pid}/invitations`, "POST", {
-          email: "person@test.example",
-        });
-        const token = new URL(link.data.url).searchParams.get("invite");
-        assert.equal(
-          (
-            await directoryUser.call("/auth/login", "POST", {
-              method: "ldap",
-              email: "user",
-              password: "user-password",
-              invite: token,
-            })
-          ).status,
           200,
         );
-        assert.equal((await directoryUser.call("/me")).data.authType, "ldap");
+        const directoryProfile = (await directoryUser.call("/me")).data;
+        assert.equal(directoryProfile.authType, "ldap");
+        assert.equal(directoryProfile.role, "user");
+        assert.deepEqual((await directoryUser.call("/projects")).data, []);
+        const invitation = await admin.call(
+          `/projects/${pid}/invitations`,
+          "POST",
+          { userId: directoryProfile.id },
+        );
+        assert.equal(invitation.status, 201);
         assert.equal(
-          (await directoryUser.call(`/invitations/${token}/accept`, "POST", {}))
-            .status,
+          (
+            await directoryUser.call(
+              `/invitations/${invitation.data.id}/accept`,
+              "POST",
+              {},
+            )
+          ).status,
           200,
         );
         await assert.rejects(() =>

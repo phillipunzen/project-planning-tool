@@ -4,9 +4,8 @@ import {
   randomBytes,
   createHash,
 } from "node:crypto";
-import { Setting, Invitation, Membership, User, db } from "./db.js";
+import { Setting, Membership, User, db } from "./db.js";
 import bcrypt from "bcryptjs";
-import { Op } from "sequelize";
 import { Client } from "ldapts";
 import * as oidc from "openid-client";
 export const hashToken = (token) =>
@@ -127,7 +126,7 @@ export async function ldapIdentity(config, username, password) {
     await directory.unbind().catch(() => {});
   }
 }
-export async function resolveExternalUser(identity, inviteToken) {
+export async function resolveExternalUser(identity) {
   return db.transaction(async (t) => {
     await Setting.findByPk("installation", {
       transaction: t,
@@ -143,27 +142,6 @@ export async function resolveExternalUser(identity, inviteToken) {
           status: 403,
         });
       return user;
-    }
-    if (identity.authType !== "oidc") {
-      const invitation =
-        inviteToken &&
-        (await Invitation.findOne({
-          where: {
-            tokenHash: hashToken(inviteToken),
-            email: identity.email,
-            acceptedAt: null,
-            expiresAt: { [Op.gt]: new Date() },
-          },
-          transaction: t,
-          lock: t.LOCK.UPDATE,
-        }));
-      if (!invitation)
-        throw Object.assign(
-          new Error(
-            "Für die erste Anmeldung benötigst du einen gültigen Einladungslink für deine E-Mail-Adresse.",
-          ),
-          { status: 403 },
-        );
     }
     if (
       await User.findOne({ where: { email: identity.email }, transaction: t })

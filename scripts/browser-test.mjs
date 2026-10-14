@@ -426,39 +426,23 @@ try {
     page.locator(".kanban-column").first().locator(".card-title").first(),
   ).toHaveText("UI-Test mit Checkliste");
   console.log("PASS: Tastatur-Drag");
+  const registered = await page.request.post(base + "/api/admin/users", { headers: { Origin: base }, data: { name: "Kim Team", email: "team@test.example", password: "TeamPassword123!" } });
+  if (registered.status() !== 201) throw new Error("Cannot create invite recipient");
   await page.getByRole("button", { name: "Einladen", exact: true }).click();
-  await page
-    .locator("dialog")
-    .getByLabel("E-Mail-Adresse", { exact: true })
-    .fill("team@test.example");
-  await page.getByRole("button", { name: "Einladungslink erstellen" }).click();
-  const inviteUrl = await page
-    .getByLabel("Einladungslink", { exact: true })
-    .inputValue();
-  await page
-    .getByRole("button", { name: "Schließen", exact: true })
-    .first()
-    .click();
-  const other = await browser.newPage({
-    locale: "de-DE",
-    viewport: { width: 1280, height: 900 },
-  });
+  await page.getByRole("combobox", { name: "Name oder E-Mail suchen", exact: true }).fill("Kim Team");
+  await page.getByRole("option", { name: /Kim Team/ }).click();
+  await page.getByRole("button", { name: "Benutzer einladen", exact: true }).click();
+  await expect(page.getByText("Einladung im Tool erstellt", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Schließen", exact: true }).first().click();
+  const other = await browser.newPage({ locale: "de-DE", viewport: { width: 1280, height: 900 } });
   other.on("pageerror", (e) => errors.push(e.message));
-  const inviteLocation = new URL(inviteUrl);
-  await other.goto(base + inviteLocation.pathname + inviteLocation.search);
-  await other.getByLabel("Dein Name").fill("Kim Team");
-  await other.getByLabel("Neues Passwort").fill("TeamPassword123!");
-  await other.context().setExtraHTTPHeaders({ "x-test-strip-session-cookie": "1" });
-  const acceptResponse = other.waitForResponse(r => r.url().includes("/accept") && r.request().method() === "POST");
-  await other
-    .getByRole("button", { name: "Konto erstellen & beitreten" })
-    .click();
-  if ((await acceptResponse).status() !== 200) throw new Error("Invitation acceptance failed before session confirmation");
-  await expect(other.getByText("Die Anmeldesitzung konnte nicht bestätigt werden. Bitte erlaube Cookies für diese Website. Falls das Problem bleibt, wende dich an den Administrator.", { exact: true })).toBeVisible();
-  await expect(other.getByLabel("E-Mail-Adresse", { exact: true })).toHaveValue("team@test.example");
-  await other.context().setExtraHTTPHeaders({});
+  await other.goto(base);
+  await other.getByLabel("E-Mail-Adresse", { exact: true }).fill("team@test.example");
   await other.getByLabel("Passwort", { exact: true }).fill("TeamPassword123!");
   await other.getByRole("button", { name: "Anmelden", exact: true }).click();
+  await other.getByRole("button", { name: "Einladungen", exact: true }).click();
+  await expect(other.locator(".inbox-invitation")).toHaveCount(1);
+  await other.getByRole("button", { name: "Annehmen", exact: true }).click();
   await expect(
     other.getByRole("heading", { name: "Unser erstes Projekt", exact: true }),
   ).toBeVisible();

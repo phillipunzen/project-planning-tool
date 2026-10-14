@@ -3424,3 +3424,23 @@ fieldset:disabled {
 .custom-option-row input{min-width:0;flex:1}
 .custom-option-row .icon-button{flex-shrink:0}
 @media(max-width:600px){.custom-field-definition{padding:12px}.custom-field-definition .form-grid{grid-template-columns:1fr}.custom-field-options .button{min-height:44px}}
+
+.invitations-trigger{position:relative;flex-shrink:0;min-width:40px;min-height:40px}
+.invitation-count{position:absolute;top:-2px;right:-4px;min-width:18px;height:18px;border-radius:12px;background:var(--primary);color:white;font-size:10px;line-height:18px;padding:0 4px}
+.invitations-trigger.active{color:var(--primary);background:var(--primary-soft)}
+.invitations-inbox{max-width:1000px;width:100%;padding:32px;margin:0 auto}
+.invitations-inbox-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:28px}
+.invitations-inbox-heading h1{font-size:28px;margin:8px 0}
+.invitations-inbox-heading p,.invitations-empty p{color:var(--muted)}
+.invitations-empty{text-align:center;padding:64px 16px;color:var(--muted)}
+.invitations-empty h2{color:var(--text);font-size:18px;margin:16px 0 8px}
+.inbox-list{display:grid;gap:16px}
+.inbox-invitation{display:flex;align-items:center;gap:18px;padding:24px;background:var(--surface,#fff);border:1px solid var(--border);border-radius:14px}
+.inbox-project-icon{width:44px;height:44px;display:grid;place-items:center;border-radius:12px;color:white;flex-shrink:0}
+.inbox-invitation-content{flex:1;min-width:0;overflow-wrap:anywhere}
+.inbox-invitation-content h2{font-size:18px;margin-bottom:8px}
+.inbox-invitation-content p{margin-bottom:8px}
+.inbox-invitation-content span{display:flex;align-items:center;gap:6px;color:var(--muted)}
+.inbox-invitation-content small{display:block;color:var(--muted);margin-top:8px}
+.inbox-invitation-actions{display:flex;gap:8px;flex-shrink:0}
+@media(max-width:650px){.invitations-inbox{padding:24px 16px}.invitations-inbox-heading{align-items:flex-start;flex-direction:column}.inbox-invitation{flex-wrap:wrap;gap:12px;padding:18px}.inbox-invitation-actions{width:100%}.inbox-invitation-actions .button{flex:1;min-height:44px}.invitations-trigger{min-width:44px;min-height:44px}}

@@ -230,7 +230,7 @@ try {
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await context.setOffline(true);
-  await page.goto(base + "/?invite=" + "a".repeat(64));
+  await page.goto(base + "/?view=invitations");
   await expect(
     page.getByRole("heading", { name: "You're currently offline." }),
   ).toBeVisible();
@@ -244,7 +244,7 @@ try {
   await page.goto(base);
   await expect(page.locator(".task-card")).toHaveCount(6);
   console.log(
-    "PASS: System name in manifest and offline page, profile language and dark mode, invitation URL preserved offline",
+    "PASS: System name in manifest and offline page, profile language and dark mode, application URL preserved offline",
   );
 
   await page.evaluate(async () => {

@@ -96,6 +96,7 @@ import { CardAutosave } from "./card-autosave.js";
 import { usePwaInstalled, promptInstall } from "./pwa.js";
 import { CustomTaskFields } from "./custom-fields.jsx";
 import { TemplatesModal } from "./templates.jsx";
+import { InvitationInbox } from "./invitations.jsx";
 import { InviteUserSearch } from "./invite-search.jsx";
 import {
   templateCardFields,
@@ -339,10 +340,9 @@ function App() {
     [sideOpen, setSideOpen] = useState(false);
   const [modal, setModal] = useState(null),
     [toast, setToast] = useState(null),
-    [loadError, setLoadError] = useState(""),
-    [invite, setInvite] = useState(
-      new URLSearchParams(location.search).get("invite"),
-    );
+    [loadError, setLoadError] = useState("");
+  const [invitations, setInvitations] = useState([]),
+    [invitationError, setInvitationError] = useState("");
   const [busy, setBusy] = useState(false),
     [activity, setActivity] = useState([]),
     [compact, setCompact] = useState(
@@ -400,7 +400,7 @@ function App() {
     return data;
   }, []);
   useEffect(() => {
-    if (!user || invite) return;
+    if (!user) return;
     reloadProjects()
       .then((data) => {
         if (!projectId && data.length) {
@@ -408,7 +408,40 @@ function App() {
         }
       })
       .catch((e) => notify(e.message, true));
-  }, [user, invite, reloadProjects]);
+  }, [user, reloadProjects]);
+  const reloadInvitations = useCallback(async () => {
+    try {
+      const entries = await api("/invitations");
+      setInvitations(entries);
+      setInvitationError("");
+    } catch (e) {
+      setInvitationError(e.message);
+      throw e;
+    }
+  }, []);
+  useEffect(() => {
+    setInvitations([]);
+    setInvitationError("");
+    if (!user) return;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const entries = await api("/invitations");
+        if (active) {
+          setInvitations(entries);
+          setInvitationError("");
+        }
+      } catch (e) {
+        if (active) setInvitationError(e.message);
+      }
+    };
+    refresh();
+    const timer = setInterval(refresh, 5000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [user?.id]);
   const project = projects.find((p) => p.id === projectId);
   useEffect(() => {
     setBoard(null);
@@ -609,23 +642,6 @@ function App() {
         </button>
       </div>
     );
-  if (invite)
-    return (
-      <>
-        <ThemeControl floating />
-        <InviteScreen
-          token={invite}
-          user={user}
-          publicInfo={publicInfo}
-          onLogin={finishLogin}
-          onDone={(u) => {
-            finishLogin(u);
-            setInvite(null);
-            history.replaceState(null, "", "/");
-          }}
-        />
-      </>
-    );
   if (!user)
     return (
       <>
@@ -802,14 +818,31 @@ function App() {
             <strong>
               {view === "admin"
                 ? t("Administration")
-                : view === "projects"
-                  ? t("Projekte")
-                  : view === "mine"
-                    ? t("Meine Aufgaben")
-                    : project?.name || t("Projekte")}
+                : view === "invitations"
+                  ? t("Einladungen")
+                  : view === "projects"
+                    ? t("Projekte")
+                    : view === "mine"
+                      ? t("Meine Aufgaben")
+                      : project?.name || t("Projekte")}
             </strong>
           </div>
           <div className="topbar-right">
+            <button
+              className={`icon-button invitations-trigger ${view === "invitations" ? "active" : ""}`}
+              type="button"
+              aria-label={t("Einladungen")}
+              title={t("Einladungen")}
+              onClick={() => {
+                setView("invitations");
+                setSideOpen(false);
+              }}
+            >
+              <Inbox size={20} />
+              {invitations.length > 0 && (
+                <span className="invitation-count">{invitations.length}</span>
+              )}
+            </button>
             <ThemeControl />
             <span className="connection-status">
               <i />
@@ -818,6 +851,19 @@ function App() {
             <Avatar user={user} size="small" />
           </div>
         </header>
+        {view === "invitations" && (
+          <InvitationInbox
+            invitations={invitations}
+            error={invitationError}
+            api={api}
+            onRefresh={reloadInvitations}
+            onAccepted={async (id) => {
+              await reloadProjects();
+              selectProject(id);
+              notify(t("Einladung angenommen"));
+            }}
+          />
+        )}
         {view === "projects" && (
           <ProjectOverview
             projects={projects}
@@ -1355,13 +1401,7 @@ function ProfileModal({ user, onClose, onSaved }) {
     </Modal>
   );
 }
-function AuthScreen({
-  info,
-  onSuccess,
-  invitation = null,
-  token,
-  initialError = "",
-}) {
+function AuthScreen({ info, onSuccess, initialError = "" }) {
   const brand = useBranding();
   const [error, setError] = useState(
       initialError ||
@@ -1390,7 +1430,6 @@ function AuthScreen({
               email: f.get("email"),
               password: f.get("password"),
               method,
-              invite: token,
             },
       });
       setSetup(false);
@@ -1473,20 +1512,11 @@ function AuthScreen({
               ? t(
                   "Erstelle dein Administratorkonto und starte dein erstes Projekt.",
                 )
-              : invitation
-                ? t("Melde dich an, um „{0}“ beizutreten.", [
-                    invitation.project,
-                  ])
-                : t(
-                    "Melde dich an und mach dort weiter, wo du aufgehört hast.",
-                  )}
+              : t("Melde dich an und mach dort weiter, wo du aufgehört hast.")}
           </p>
           {!setup && info.provider === "oidc" && (
             <>
-              <a
-                className="button sso-button"
-                href={`/api/auth/oidc${token ? `?invite=${token}` : ""}`}
-              >
+              <a className="button sso-button" href="/api/auth/oidc">
                 <Shield size={18} />
                 {info.providerName}
                 <ArrowRight size={16} />
@@ -1532,7 +1562,7 @@ function AuthScreen({
                   : "E-Mail-Adresse",
               )}
               <div className="input-with-icon">
-                <Mail size={17} />
+                <Inbox size={17} />
                 <input
                   name="email"
                   type={method === "ldap" && !setup ? "text" : "email"}
@@ -1541,7 +1571,6 @@ function AuthScreen({
                       ? t("Dein Benutzername")
                       : "du@unternehmen.de"
                   }
-                  defaultValue={invitation?.email}
                   required
                   autoComplete="username"
                 />
@@ -1596,148 +1625,6 @@ function AuthScreen({
         <span className="login-bottom">
           {t("{0} · Gemeinsam mehr bewegen", [brand.name])}
         </span>
-      </div>
-    </div>
-  );
-}
-function InviteScreen({ token, user, publicInfo, onLogin, onDone }) {
-  const [info, setInfo] = useState(null),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState(false),
-    [login, setLogin] = useState(false),
-    [acceptedUserId, setAcceptedUserId] = useState(null);
-  useEffect(() => {
-    api(`/invitations/${token}`)
-      .then(setInfo)
-      .catch((e) => setError(e.message));
-  }, [token]);
-  async function accept(e) {
-    e?.preventDefault();
-    setBusy(true);
-    setError("");
-    const f = e ? new FormData(e.currentTarget) : null;
-    let accepted;
-    try {
-      accepted = await api(`/invitations/${token}/accept`, {
-        method: "POST",
-        body: f ? { name: f.get("name"), password: f.get("password") } : {},
-      });
-      setAcceptedUserId(accepted.id);
-      await onDone(await confirmLoginSession(accepted));
-    } catch (e) {
-      setError(e.message);
-      if (accepted) setLogin(true);
-    } finally {
-      setBusy(false);
-    }
-  }
-  if (login && !user)
-    return (
-      <AuthScreen
-        info={publicInfo}
-        invitation={info}
-        token={acceptedUserId ? undefined : token}
-        initialError={error}
-        onSuccess={async (u) => {
-          if (acceptedUserId === u.id) await onDone(u);
-          else await onLogin(u);
-          setLogin(false);
-        }}
-      />
-    );
-  return (
-    <div className="invitation-page">
-      <Brand />
-      <div className="invitation-card">
-        <div className="invitation-illustration">
-          <Users size={34} />
-        </div>
-        <span className="eyebrow">{t("GEMEINSAM GEHT MEHR")}</span>
-        <h1>{t("Du bist eingeladen.")}</h1>
-        {info ? (
-          <>
-            <p>
-              {t("Werde Teil von ")}
-              <strong>{info.project}</strong>
-              {"."}
-            </p>
-            <div className="invitation-details">
-              <span>
-                <Mail size={16} />
-                {info.email}
-              </span>
-              <span>
-                <Shield size={16} />
-                {t(roleNames[info.role])}
-              </span>
-            </div>
-            {user ? (
-              <>
-                <p>
-                  {t("Angemeldet als ")}
-                  {user.email}
-                </p>
-                <button
-                  className="button primary full"
-                  disabled={busy || user.email !== info.email}
-                  onClick={() => accept()}
-                >
-                  {busy ? <Spinner /> : t("Projekt beitreten")}
-                  <ArrowRight size={17} />
-                </button>
-                {user.email !== info.email && (
-                  <p className="form-error">
-                    {t(
-                      "Bitte melde dich zuerst mit dem eingeladenen Konto an.",
-                    )}
-                  </p>
-                )}
-              </>
-            ) : (
-              <>
-                <form onSubmit={accept}>
-                  <label>
-                    {t("Dein Name")}
-                    <input
-                      name="name"
-                      autoComplete="name"
-                      required
-                      maxLength={100}
-                    />
-                  </label>
-                  <label>
-                    {t("Neues Passwort")}
-                    <input
-                      name="password"
-                      type="password"
-                      autoComplete="new-password"
-                      required
-                      minLength={10}
-                      maxLength={72}
-                      placeholder={t("Mindestens 10 Zeichen")}
-                    />
-                  </label>
-                  <button className="button primary full" disabled={busy}>
-                    {busy ? <Spinner /> : t("Konto erstellen & beitreten")}
-                    <ArrowRight size={17} />
-                  </button>
-                </form>
-                <button
-                  className="text-button full"
-                  onClick={() => setLogin(true)}
-                >
-                  {t("Bereits ein Konto oder Firmenanmeldung? Anmelden")}
-                </button>
-              </>
-            )}
-          </>
-        ) : !error ? (
-          <Spinner />
-        ) : null}
-        <FormError error={error} />
-        <a className="text-button" href="/">
-          {t("Zum Arbeitsbereich")}
-        </a>
       </div>
     </div>
   );
@@ -3751,10 +3638,9 @@ function CardModal({
 function MembersModal({ project, members, onClose, onChanged, notify }) {
   const [invitations, setInvitations] = useState([]),
     [error, setError] = useState(""),
-    [busy, setBusy] = useState(false),
-    [link, setLink] = useState("");
-  const [inviteEmail, setInviteEmail] = useState(""),
-    [selectedUser, setSelectedUser] = useState(null);
+    [busy, setBusy] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null),
+    [searchKey, setSearchKey] = useState(0);
   const owner = project.myRole === "owner";
   const load = () =>
     owner
@@ -3766,16 +3652,18 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
   async function invite(e) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
+    if (!selectedUser) return;
     setBusy(true);
     setError("");
     try {
-      const r = await api(`/projects/${project.id}/invitations`, {
+      await api(`/projects/${project.id}/invitations`, {
         method: "POST",
-        body: { email: f.get("email"), role: f.get("role") },
+        body: { userId: selectedUser.id, role: f.get("role") },
       });
-      setLink(r.url);
+      setSelectedUser(null);
+      setSearchKey((key) => key + 1);
       await load();
-      notify(t("Einladungslink erstellt"));
+      notify(t("Einladung im Tool erstellt"));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -3809,18 +3697,10 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
         method: "DELETE",
       });
       await load();
-      setLink("");
+      setSearchKey((key) => key + 1);
       notify(t("Einladung zurückgezogen"));
     } catch (e) {
       setError(e.message);
-    }
-  }
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(link);
-      notify(t("Einladungslink kopiert"));
-    } catch {
-      notify(t("Bitte kopiere den Link aus dem Textfeld."), true);
     }
   }
   return (
@@ -3834,81 +3714,44 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
         <>
           <form onSubmit={invite}>
             <InviteUserSearch
+              key={searchKey}
               projectId={project.id}
               api={api}
-              onSelect={(user) => {
-                setInviteEmail(user.email);
-                setSelectedUser(user);
-                setLink("");
-              }}
+              onSelect={setSelectedUser}
             />
             {selectedUser && (
               <p className="invite-selected">
                 {t("Ausgewählt: {0}", [selectedUser.name])}
               </p>
             )}
-            <label>
-              {t("E-Mail-Adresse")}
-              <input
-                name="email"
-                type="email"
-                value={inviteEmail}
-                onChange={(event) => {
-                  setInviteEmail(event.target.value);
-                  setSelectedUser(null);
-                  setLink("");
-                }}
-                required
-                placeholder="kollege@unternehmen.de"
-                maxLength={190}
-              />
-            </label>
             <div className="invite-form-bottom">
               <label>
                 {t("Berechtigung")}
-                <select name="role">
+                <select name="role" aria-label={t("Berechtigung")}>
                   <option value="editor">{t("Kann bearbeiten")}</option>
                   <option value="viewer">{t("Kann lesen")}</option>
                 </select>
               </label>
-              <button className="button primary" disabled={busy}>
+              <button
+                className="button primary"
+                disabled={busy || !selectedUser}
+              >
                 {busy ? (
                   <Spinner />
                 ) : (
                   <>
-                    <Link size={16} />
-                    {t("Einladungslink erstellen")}
+                    <Users size={16} />
+                    {t("Benutzer einladen")}
                   </>
                 )}
               </button>
             </div>
             <p className="form-note">
               {t(
-                "Der Link gilt 7 Tage. Teile ihn persönlich mit der eingeladenen Person; es wird keine E-Mail versendet.",
+                "Die Einladung erscheint direkt im Tool der ausgewählten Person und gilt 7 Tage.",
               )}
             </p>
           </form>
-          {link && (
-            <div className="generated-link">
-              <CheckCircle2 size={18} />
-              <div>
-                <strong>{t("Bereit zum Teilen")}</strong>
-                <input
-                  readOnly
-                  value={link}
-                  aria-label={t("Einladungslink")}
-                  onClick={(e) => e.target.select()}
-                />
-              </div>
-              <button
-                className="icon-button"
-                aria-label={t("Einladungslink kopieren")}
-                onClick={copy}
-              >
-                <Copy size={18} />
-              </button>
-            </div>
-          )}
         </>
       )}
       <div className="section-heading compact">
@@ -3962,7 +3805,9 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
                 <Mail size={17} />
               </span>
               <div>
-                <strong>{i.email}</strong>
+                <strong>
+                  {i.recipient?.name || t("Konto noch nicht vorhanden")}
+                </strong>
                 <span>
                   {t(roleNames[i.role])}
                   {t(" · gültig bis ")}
@@ -3971,7 +3816,9 @@ function MembersModal({ project, members, onClose, onChanged, notify }) {
               </div>
               <button
                 className="icon-button"
-                aria-label={t("Einladung an {0} zurückziehen", [i.email])}
+                aria-label={t("Einladung an {0} zurückziehen", [
+                  i.recipient?.name || t("Konto noch nicht vorhanden"),
+                ])}
                 onClick={() => revoke(i.id)}
               >
                 <X size={16} />
