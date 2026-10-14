@@ -2293,6 +2293,9 @@ fieldset:disabled {
   display: none;
 }
 .sso-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
   border: 1px solid var(--border-accent, #dad7ee);
   background: var(--surface-soft, #f7f6ff);
@@ -2302,6 +2305,27 @@ fieldset:disabled {
 }
 .sso-button svg:last-child {
   margin-left: auto;
+}
+.sso-button.authentik-button {
+  min-height: 48px;
+  border-color: #fd4b2d;
+  background: var(--surface, white);
+  color: var(--text-strong, #242738);
+  font-size: 14px;
+}
+.sso-button.authentik-button:hover {
+  background: var(--surface-soft, #f7f6ff);
+}
+.authentik-logo {
+  flex-shrink: 0;
+  object-fit: contain;
+}
+.authentik-logo-white,
+:root[data-theme="dark"] .authentik-logo-color {
+  display: none;
+}
+:root[data-theme="dark"] .authentik-logo-white {
+  display: block;
 }
 .form-divider {
   position: relative;

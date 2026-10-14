@@ -77,6 +77,8 @@ import {
   Pencil,
 } from "lucide-react";
 import "./styles.css";
+import authentikIcon from "./assets/authentik-icon.svg";
+import authentikIconWhite from "./assets/authentik-icon-white.svg";
 import {
   ThemeProvider,
   ThemeControl,
@@ -1528,10 +1530,38 @@ function AuthScreen({ info, onSuccess, initialError = "" }) {
           </p>
           {!setup && info.provider === "oidc" && (
             <>
-              <a className="button sso-button" href="/api/auth/oidc">
-                <Shield size={18} />
-                {info.providerName}
-                <ArrowRight size={16} />
+              <a
+                className={`button sso-button${info.providerBrand === "authentik" ? " authentik-button" : ""}`}
+                href="/api/auth/oidc"
+              >
+                {info.providerBrand === "authentik" ? (
+                  <>
+                    <img
+                      className="authentik-logo authentik-logo-color"
+                      src={authentikIcon}
+                      alt=""
+                      aria-hidden="true"
+                      width="26"
+                      height="26"
+                    />
+                    <img
+                      className="authentik-logo authentik-logo-white"
+                      src={authentikIconWhite}
+                      alt=""
+                      aria-hidden="true"
+                      width="26"
+                      height="26"
+                    />
+                  </>
+                ) : (
+                  <Shield size={18} aria-hidden="true" />
+                )}
+                <span>
+                  {info.providerBrand === "authentik"
+                    ? t("Mit authentik anmelden")
+                    : info.providerName}
+                </span>
+                <ArrowRight size={16} aria-hidden="true" />
               </a>
               <div className="form-divider">
                 <span>{t("oder mit lokalem Konto")}</span>

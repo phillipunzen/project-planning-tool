@@ -211,10 +211,15 @@ app.get(
   "/api/public",
   api(async (req, res) => {
     const c = await getAuth();
+    const isAuthentik =
+      c.provider === "oidc" &&
+      (/authentik/i.test(c.oidc.name || "") ||
+        /\/application\/o\//.test(c.oidc.issuer || ""));
     res.json({
       setupRequired: !(await User.count()),
       provider: c.provider,
       providerName: c.oidc.name || "Single Sign-on",
+      providerBrand: isAuthentik ? "authentik" : null,
       branding: publicBranding(await readBranding()),
     });
   }),
