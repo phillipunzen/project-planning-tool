@@ -3,9 +3,23 @@ import { t, useLanguage } from "./i18n.js";
 import { Monitor, Moon, Sun } from "lucide-react";
 
 import { colorThemes } from "../shared/color-themes.js";
+import {
+  interfaceDesigns,
+  defaultInterfaceDesign,
+} from "../shared/interface-designs.js";
 
 const storageKey = "projektwerk-theme";
 const ThemeContext = createContext(null);
+const designStorageKey = "projektwerk-design";
+const validDesign = (value) =>
+  interfaceDesigns.includes(value) ? value : defaultInterfaceDesign;
+function readDesign() {
+  try {
+    return validDesign(localStorage.getItem(designStorageKey));
+  } catch {
+    return defaultInterfaceDesign;
+  }
+}
 const validPreference = (value) =>
   ["light", "dark"].includes(value) ? value : "system";
 function readPreference() {
@@ -17,6 +31,15 @@ function readPreference() {
 }
 
 export function ThemeProvider({ children }) {
+  const [design, setDesign] = useState(readDesign);
+  useEffect(() => {
+    document.documentElement.dataset.design = design;
+    try {
+      localStorage.setItem(designStorageKey, design);
+    } catch {
+      /* Storage is optional; the account preference still works. */
+    }
+  }, [design]);
   const [preference, setPreference] = useState(readPreference);
   const [colorTheme, setColorTheme] = useState(() => {
     try {
@@ -49,6 +72,8 @@ export function ThemeProvider({ children }) {
     const media = matchMedia("(prefers-color-scheme: dark)");
     const changed = (event) => setSystemDark(event.matches);
     const stored = (event) => {
+      if (event.key === designStorageKey || event.key === null)
+        setDesign(readDesign());
       if (event.key === storageKey || event.key === null)
         setPreference(readPreference());
       if (event.key === "projektwerk-color-theme" || event.key === null) {
@@ -81,6 +106,8 @@ export function ThemeProvider({ children }) {
       value={{
         preference,
         changePreference,
+        design,
+        changeDesign: (value) => setDesign(validDesign(value)),
         colorTheme,
         changeColorTheme: (value) =>
           setColorTheme(Object.hasOwn(colorThemes, value) ? value : "indigo"),
@@ -114,6 +141,53 @@ export function ThemeControl({ floating = false }) {
 }
 
 export const useColorTheme = () => useContext(ThemeContext);
+export function DesignChoices({ value, onChange, disabled }) {
+  useLanguage();
+  return (
+    <fieldset className="design-choices" disabled={disabled}>
+      <legend>{t("Interface-Design")}</legend>
+      <div className="design-choice-grid">
+        {[
+          {
+            id: "glass",
+            label: t("Liquid Glass"),
+            description: t("Licht, Tiefe und sanfte Glasflächen."),
+          },
+          {
+            id: "classic",
+            label: t("Klassisch"),
+            description: t("Das vertraute Design mit klaren Flächen."),
+          },
+        ].map((option) => (
+          <label className="design-choice" key={option.id}>
+            <input
+              type="radio"
+              name="interface-design"
+              value={option.id}
+              aria-label={option.label}
+              checked={value === option.id}
+              onChange={() => onChange(option.id)}
+            />
+            <span
+              className={`design-preview design-preview-${option.id}`}
+              aria-hidden="true"
+            >
+              <i />
+              <span><i /><i /><i /></span>
+            </span>
+            <span className="design-choice-title">
+              {option.label}
+              {option.id === defaultInterfaceDesign && (
+                <small>{t("Standard")}</small>
+              )}
+            </span>
+            <span className="design-choice-description">{option.description}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
 export function ColorThemeChoices({ value, onChange, disabled }) {
   useLanguage();
   return (

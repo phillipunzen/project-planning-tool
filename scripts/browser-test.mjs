@@ -93,14 +93,15 @@ try {
   await expectTheme(page, "dark");
   const darkCard = await page.locator(".task-card").first().evaluate(el => getComputedStyle(el).backgroundColor);
   if (darkCard === lightCard) throw new Error("Kanban cards did not switch appearance");
-  await expect(page.locator(".kanban-column").first()).toHaveCSS("background-color", "rgb(32, 43, 61)");
-  await expect(page.locator(".button.secondary").first()).toHaveCSS("background-color", "rgb(28, 38, 56)");
+  await expect(page.locator("html")).toHaveAttribute("data-design", "glass");
+  await expect(page.locator(".kanban-column").first()).toHaveCSS("background-color", "rgba(28, 48, 73, 0.79)");
+  await expect(page.locator(".button.secondary").first()).toHaveCSS("background-color", "rgba(28, 48, 73, 0.79)");
   await page.screenshot({ path: "artifacts/board-dark-desktop.png", fullPage: true });
   await page.getByRole("button", { name: "Aufgabe erstellen", exact: true }).click();
   await expect(page.locator("dialog")).toBeVisible();
   const fieldBackground = await page.getByLabel("Titel", { exact: true }).evaluate(el => getComputedStyle(el).backgroundColor);
   const dialogBackground = await page.locator("dialog").evaluate(el => getComputedStyle(el).backgroundColor);
-  if (fieldBackground !== darkCard || dialogBackground !== darkCard) throw new Error("Dark fields and dialogs have inconsistent surfaces");
+  if (fieldBackground !== "rgb(28, 44, 67)" || dialogBackground !== darkCard) throw new Error("Dark fields and dialogs have inconsistent surfaces");
   await page.screenshot({ path: "artifacts/card-dark-desktop.png", fullPage: true });
   await page.locator("dialog .modal-heading").getByRole("button", { name: "Schließen", exact: true }).click();
   // A second tab must receive explicit preferences without losing its own state.
@@ -416,12 +417,18 @@ try {
     name: "Aufgabe Ideen & Anforderungen sammeln verschieben",
     exact: true,
   });
+  const keyboardProject = (await (await page.request.get(base + "/api/projects")).json())[0];
+  const keyboardBoard = await (await page.request.get(base + `/api/boards/${keyboardProject.Boards[0].id}`)).json();
+  const keyboardTarget = keyboardBoard.cards.find(card => card.title === "UI-Test mit Checkliste");
+  await keyboardHandle.scrollIntoViewIfNeeded();
   await keyboardHandle.focus();
   await keyboardHandle.press("Space");
-  await page.waitForTimeout(100);
+  await expect(keyboardHandle).toHaveAttribute("aria-pressed", "true");
   await keyboardHandle.press("ArrowDown");
-  await page.waitForTimeout(100);
+  await expect(page.locator('[aria-live="assertive"]')).toContainText(`droppable area ${keyboardTarget.id}`);
+  const keyboardMove = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith("/move"));
   await keyboardHandle.press("Space");
+  if ((await keyboardMove).status() !== 200) throw new Error("Keyboard move was rejected");
   await expect(
     page.locator(".kanban-column").first().locator(".card-title").first(),
   ).toHaveText("UI-Test mit Checkliste");
@@ -579,6 +586,23 @@ try {
     });
     await mobile.waitForTimeout(20);
   }
+  // Full-width buckets require holding at the edge while the board scrolls.
+  for (let i = 0; i < 30; i++) {
+    const bounds = await secondColumn.boundingBox();
+    if (bounds.x < 240) break;
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: 375, y: 650 }],
+    });
+    await mobile.waitForTimeout(50);
+  }
+  const visibleTarget = await secondColumn.boundingBox();
+  if (visibleTarget.x >= 330) throw new Error("Touch drag did not scroll to the next bucket");
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [{ x: Math.min(350, visibleTarget.x + 80), y: 650 }],
+  });
+  await mobile.waitForTimeout(100);
   await cdp.send("Input.dispatchTouchEvent", {
     type: "touchEnd",
     touchPoints: [],

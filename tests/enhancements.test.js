@@ -129,6 +129,7 @@ try {
         const oldBoard = await Board.findByPk(board.id);
         assert.equal(db.getDatabaseName(), "projektwerk_test");
         await db.query("ALTER TABLE `Users` DROP COLUMN `theme`");
+        await db.query("ALTER TABLE `Users` DROP COLUMN `design`");
         for (const column of [
           "templates",
           "defaultTemplateId",
@@ -150,7 +151,42 @@ try {
         assert.equal(current.defaultTemplateId, null);
         assert.equal(current.templateRevision, 0);
         assert.equal((await User.findByPk(candidate.id)).theme, "indigo");
+        assert.equal((await User.findByPk(candidate.id)).design, "glass");
         assert.equal((await admin.call("/me")).status, 200);
+      },
+    );
+    await t.test(
+      "interface design defaults to glass and persists per user across sign-in and initialization",
+      async () => {
+        assert.equal((await viewer.call("/me")).data.design, "glass");
+        const saved = await editor.call("/me", "PATCH", { design: "classic" });
+        assert.equal(saved.status, 200);
+        assert.equal(saved.data.design, "classic");
+        await initializeDatabase();
+        const secondDevice = client();
+        const login = await secondDevice.call("/auth/login", "POST", {
+          email: editorUser.email,
+          password: "FeaturePassword123!",
+        });
+        assert.equal(login.status, 200);
+        assert.equal(login.data.design, "classic");
+        assert.equal((await viewer.call("/me")).data.design, "glass");
+        for (const input of [
+          { design: "missing" },
+          { design: null },
+          { design: "glass", role: "admin" },
+        ])
+          assert.equal((await editor.call("/me", "PATCH", input)).status, 400);
+        assert.equal(
+          (await anonymous.call("/me", "PATCH", { design: "classic" })).status,
+          401,
+        );
+        assert.equal((await editor.call("/me")).data.design, "classic");
+        assert.equal((await editor.call("/me")).data.role, "user");
+        assert.equal(
+          (await editor.call("/me", "PATCH", { design: "glass" })).status,
+          200,
+        );
       },
     );
     await t.test(

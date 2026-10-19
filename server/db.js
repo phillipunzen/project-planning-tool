@@ -1,6 +1,7 @@
 import { Sequelize, DataTypes as D } from "sequelize";
 import session from "express-session";
 import { SESSION_DURATION_MS } from "./session-policy.js";
+import { defaultInterfaceDesign } from "../shared/interface-designs.js";
 export const db = new Sequelize(
   process.env.DATABASE_NAME || "projektwerk",
   process.env.DATABASE_USER || "projektwerk",
@@ -28,6 +29,11 @@ export const User = db.define("User", {
   color: { type: D.STRING(20), defaultValue: "#6366f1" },
   language: { type: D.STRING(10), allowNull: false, defaultValue: "system" },
   theme: { type: D.STRING(20), allowNull: false, defaultValue: "indigo" },
+  design: {
+    type: D.STRING(20),
+    allowNull: false,
+    defaultValue: defaultInterfaceDesign,
+  },
 });
 export const ApiToken = db.define("ApiToken", {
   id,
@@ -142,6 +148,7 @@ export const publicUser = (u) => ({
   color: u.color,
   language: u.language,
   theme: u.theme,
+  design: u.design,
 });
 export class DatabaseSessionStore extends session.Store {
   get(sid, cb) {
@@ -206,6 +213,12 @@ export async function initializeDatabase() {
       type: D.STRING(20),
       allowNull: false,
       defaultValue: "indigo",
+    });
+  if (!users.design)
+    await db.getQueryInterface().addColumn("Users", "design", {
+      type: D.STRING(20),
+      allowNull: false,
+      defaultValue: defaultInterfaceDesign,
     });
   const boards = await db.getQueryInterface().describeTable("Boards");
   if (!boards.templates)

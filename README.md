@@ -200,6 +200,8 @@ Der Verbindungstest prüft beim OIDC-Anbieter die Discovery; bei LDAP TLS-Verbin
 
 ## Daten und Betrieb
 
+Unter **Profileinstellungen → Interface-Design** kann jeder Benutzer zwischen **Liquid Glass** (Standard) und **Klassisch** (bisheriges Design) wählen. Die Auswahl wird im Konto gespeichert und auf allen Geräten angewendet. Farbthemes sowie Hell-/Dunkelmodus bleiben unabhängig davon wählbar. Das Glasdesign bietet auf dem Handy zusätzlich eine Schnellnavigation; bei reduzierter Transparenz oder fehlender Browserunterstützung verwendet es deckende Flächen. Die neue Profileigenschaft wird beim Start automatisch ergänzt, bestehende Projekt- und Benutzerdaten bleiben erhalten.
+
 Anmeldungen über SSO, Active Directory und lokale Konten bleiben nach erfolgreicher Anmeldung 90 Tage gültig. Die Frist beginnt bei der Anmeldung; normale Nutzung verlängert sie nicht automatisch. Nach einem Update auf diese Sitzungsdauer einmal abmelden und erneut anmelden, damit das bisherige Browser-Cookie durch ein Cookie mit 90 Tagen Gültigkeit ersetzt wird. Abmelden oder das Deaktivieren eines Kontos beendet den Zugriff weiterhin sofort.
 
 Anhänge bleiben im Compose-Volume `uploads`. Bei externer MariaDB liegen Projekte, Benutzer und Sitzungen auf dem konfigurierten Datenbankserver; beim optionalen lokalen Modus speichert das Volume `mariadb-data` die Datenbank dauerhaft. Sitzungen liegen in MariaDB; ein Containerneustart verliert weder Projekte noch Sitzungen. Der `SESSION_SECRET` dient zusätzlich zur Verschlüsselung der Anbieter-Secrets. Den Schlüssel sichern und nicht ohne eine geplante Migration austauschen. Ein geänderter Schlüssel macht bestehende Sitzungen und verschlüsselte Anmeldedaten unbrauchbar.

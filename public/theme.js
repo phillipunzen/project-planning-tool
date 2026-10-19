@@ -1,5 +1,13 @@
 // Apply the saved appearance before loading the app to avoid a light flash.
 (() => {
+  let design = "glass";
+  try {
+    const saved = localStorage.getItem("projektwerk-design");
+    if (["glass", "classic"].includes(saved)) design = saved;
+  } catch {
+    /* Storage is optional. */
+  }
+  document.documentElement.dataset.design = design;
   let preference;
   try {
     preference = localStorage.getItem("projektwerk-theme");

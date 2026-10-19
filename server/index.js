@@ -12,6 +12,7 @@ import {
 import { projectIcons } from "../shared/project-icons.js";
 import { appManifest } from "../shared/pwa.js";
 import { colorThemes } from "../shared/color-themes.js";
+import { interfaceDesigns } from "../shared/interface-designs.js";
 import {
   templateCardFields,
   resolveCustomFields,
@@ -507,6 +508,7 @@ app.patch(
       .object({
         language: z.enum(["system", "de", "en"]).optional(),
         theme: z.enum(Object.keys(colorThemes)).optional(),
+        design: z.enum(interfaceDesigns).optional(),
       })
       .strict()
       .refine(

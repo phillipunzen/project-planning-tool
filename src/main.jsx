@@ -77,6 +77,7 @@ import {
   Pencil,
 } from "lucide-react";
 import "./styles.css";
+import "./glass.css";
 import authentikIcon from "./assets/authentik-icon.svg";
 import authentikIconWhite from "./assets/authentik-icon-white.svg";
 import {
@@ -84,6 +85,7 @@ import {
   ThemeControl,
   useColorTheme,
   ColorThemeChoices,
+  DesignChoices,
 } from "./theme.jsx";
 import {
   t,
@@ -94,6 +96,7 @@ import {
 } from "./i18n.js";
 import { useBranding, setBranding } from "./branding.js";
 import { projectIcons } from "../shared/project-icons.js";
+import { defaultInterfaceDesign } from "../shared/interface-designs.js";
 import { CardAutosave } from "./card-autosave.js";
 import { usePwaInstalled, promptInstall } from "./pwa.js";
 import { CustomTaskFields } from "./custom-fields.jsx";
@@ -319,7 +322,7 @@ function FormError({ error }) {
 function App() {
   useLanguage();
   const pwaInstalled = usePwaInstalled();
-  const { changeColorTheme } = useColorTheme();
+  const { changeColorTheme, changeDesign } = useColorTheme();
   const [publicInfo, setPublicInfo] = useState(null),
     [user, setUser] = useState(null),
     [loading, setLoading] = useState(true),
@@ -330,6 +333,9 @@ function App() {
   useEffect(() => {
     if (user) changeColorTheme(user.theme || "indigo");
   }, [user?.id, user?.theme]);
+  useEffect(() => {
+    if (user) changeDesign(user.design || defaultInterfaceDesign);
+  }, [user?.id, user?.design]);
   const [projects, setProjects] = useState([]),
     [projectId, setProjectId] = useState(null),
     [boardId, setBoardId] = useState(null),
@@ -1148,6 +1154,37 @@ function App() {
             </div>
           ))}
       </main>
+      <nav
+        className="glass-mobile-nav"
+        aria-label={t("Schnellnavigation")}
+        inert={compact && sideOpen ? true : undefined}
+      >
+        <button
+          type="button"
+          aria-current={view === "projects" ? "page" : undefined}
+          onClick={() => setView("projects")}
+        >
+          <LayoutGrid size={20} />{t("Projekte")}
+        </button>
+        <button
+          type="button"
+          disabled={!boardId}
+          aria-current={view === "board" ? "page" : undefined}
+          onClick={() => setView("board")}
+        >
+          <Layers size={20} />{t("Board")}
+        </button>
+        <button
+          type="button"
+          aria-current={view === "mine" ? "page" : undefined}
+          onClick={() => setView("mine")}
+        >
+          <CheckSquare size={20} />{t("Aufgaben")}
+        </button>
+        <button type="button" onClick={() => setModal({ type: "profile" })}>
+          <Users size={20} />{t("Profil")}
+        </button>
+      </nav>
       {modal?.type === "install" && (
         <Modal title={t("App installieren")} onClose={() => setModal(null)}>
           <p>
@@ -1337,6 +1374,7 @@ function Brand() {
 function ProfileModal({ user, onClose, onSaved, onApi }) {
   const [language, setLanguage] = useState(user.language || "system");
   const [theme, setTheme] = useState(user.theme || "indigo");
+  const [design, setDesign] = useState(user.design || defaultInterfaceDesign);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   async function submit(event) {
@@ -1346,7 +1384,7 @@ function ProfileModal({ user, onClose, onSaved, onApi }) {
     try {
       const updated = await api("/me", {
         method: "PATCH",
-        body: { language, theme },
+        body: { language, theme, design },
       });
       onSaved(updated);
     } catch (e) {
@@ -1387,6 +1425,10 @@ function ProfileModal({ user, onClose, onSaved, onApi }) {
           {t(
             "Die Auswahl wird in deinem Benutzerprofil gespeichert. Bei „Automatisch“ wird die erste unterstützte Browsersprache verwendet.",
           )}
+        </p>
+        <DesignChoices value={design} onChange={setDesign} disabled={busy} />
+        <p className="form-note">
+          {t("Dein Design gilt auf allen Geräten. Farbtheme und Hell-/Dunkelmodus kannst du unabhängig davon wählen.")}
         </p>
         <label>{t("Farbtheme")}</label>
         <ColorThemeChoices value={theme} onChange={setTheme} disabled={busy} />
@@ -1999,6 +2041,7 @@ function Column({ column, cards, onOpen, onAdd, onRename, canEdit }) {
   );
 }
 function Kanban({ board, cards, canEdit, onMove, onOpen, onAdd, onRename }) {
+  const occupiedColumns = new Set(cards.map((card) => card.columnId));
   const [active, setActive] = useState(null);
   const [visibleBucket, setVisibleBucket] = useState(
     board.columns[0]?.id || "",
@@ -2083,6 +2126,15 @@ function Kanban({ board, cards, canEdit, onMove, onOpen, onAdd, onRename }) {
     <DndContext
       sensors={sensors}
       collisionDetection={(args) => {
+        // Keyboard movement targets cards, or the bucket itself when empty.
+        // A large surrounding bucket must not intercept a card reorder.
+        if (!args.pointerCoordinates)
+          return closestCorners({
+            ...args,
+            droppableContainers: args.droppableContainers.filter(
+              (entry) => !occupiedColumns.has(entry.id),
+            ),
+          });
         const inside = pointerWithin(args);
         return inside.length ? inside : closestCorners(args);
       }}
@@ -2115,7 +2167,7 @@ function Kanban({ board, cards, canEdit, onMove, onOpen, onAdd, onRename }) {
         </select>
       </label>
       <div
-        className="kanban-board"
+        className={`kanban-board${active ? " is-dragging" : ""}`}
         ref={boardElement}
         onScroll={scrolled}
         style={{ "--columns": board.columns.length }}

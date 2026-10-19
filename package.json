@@ -12,6 +12,7 @@
     "test:compose": "node --test tests/compose.test.js",
     "test:pwa": "node --env-file=.env scripts/pwa-test.mjs",
     "test:features": "node --env-file=.env scripts/enhancements-browser-test.mjs",
+    "test:design": "node --env-file=.env scripts/design-browser-test.mjs",
     "test:fields": "node --env-file=.env scripts/custom-fields-browser-test.mjs",
     "test:invitations": "node --env-file=.env scripts/invitations-browser-test.mjs",
     "test:integration": "node --env-file=.env scripts/integration-browser-test.mjs",
