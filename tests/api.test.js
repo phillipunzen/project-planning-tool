@@ -509,11 +509,11 @@ await test("Projektwerk integration with real MariaDB", async (t) => {
     async () => {
       assert.equal(project.icon, "code");
       const created = await admin.call("/projects", "POST", {
-        name: "Website Icon",
-        icon: "globe",
+        name: "Budget Icon",
+        icon: "coins",
       });
       assert.equal(created.status, 201);
-      assert.equal(created.data.icon, "globe");
+      assert.equal(created.data.icon, "coins");
       const before = (await admin.call("/projects")).data.find(
         (p) => p.id === project.id,
       );

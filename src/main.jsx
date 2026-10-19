@@ -75,6 +75,38 @@ import {
   Lightbulb,
   Download,
   Pencil,
+  Server,
+  Database,
+  Network,
+  Cpu,
+  Laptop,
+  Smartphone,
+  Terminal,
+  GitBranch,
+  Bug,
+  TestTube2,
+  Workflow,
+  Blocks,
+  Megaphone,
+  Target,
+  PenTool,
+  Camera,
+  Video,
+  Music,
+  ShoppingCart,
+  Package,
+  Truck,
+  Building2,
+  House,
+  GraduationCap,
+  HeartPulse,
+  Leaf,
+  Coins,
+  Wallet,
+  Scale,
+  Handshake,
+  Puzzle,
+  Gauge,
 } from "lucide-react";
 import "./styles.css";
 import "./glass.css";
@@ -174,6 +206,38 @@ const icons = {
   globe: Globe,
   book: BookOpen,
   lightbulb: Lightbulb,
+  server: Server,
+  database: Database,
+  network: Network,
+  cpu: Cpu,
+  laptop: Laptop,
+  smartphone: Smartphone,
+  terminal: Terminal,
+  "git-branch": GitBranch,
+  bug: Bug,
+  "test-tube": TestTube2,
+  workflow: Workflow,
+  blocks: Blocks,
+  megaphone: Megaphone,
+  target: Target,
+  "pen-tool": PenTool,
+  camera: Camera,
+  video: Video,
+  music: Music,
+  "shopping-cart": ShoppingCart,
+  package: Package,
+  truck: Truck,
+  building: Building2,
+  house: House,
+  "graduation-cap": GraduationCap,
+  "heart-pulse": HeartPulse,
+  leaf: Leaf,
+  coins: Coins,
+  wallet: Wallet,
+  scale: Scale,
+  handshake: Handshake,
+  puzzle: Puzzle,
+  gauge: Gauge,
 };
 const priorities = {
   urgent: { label: "Dringend", color: "red" },
@@ -2444,6 +2508,11 @@ function MyTasks({ projects, user, onSelect }) {
   );
 }
 function ProjectModal({ project, onClose, onSaved, onDeleted }) {
+  const [iconSearch, setIconSearch] = useState("");
+  const iconQuery = iconSearch.trim().toLocaleLowerCase(getLocale());
+  const matchingIcons = Object.entries(projectIcons).filter(([key, label]) =>
+    `${key} ${label} ${t(label)}`.toLocaleLowerCase(getLocale()).includes(iconQuery),
+  );
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [selectedColor, setColor] = useState(project?.color || palette[0]),
@@ -2534,8 +2603,20 @@ function ProjectModal({ project, onClose, onSaved, onDeleted }) {
         </label>
         <fieldset className="project-icon-field" disabled={busy}>
           <legend>{t("Projektsymbol")}</legend>
+          <label className="project-icon-search">
+            {t("Symbole suchen")}
+            <input
+              type="search"
+              value={iconSearch}
+              onChange={(event) => setIconSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.preventDefault();
+              }}
+              placeholder={t("z. B. Server, Finanzen oder Marketing")}
+            />
+          </label>
           <div className="icon-picker">
-            {Object.entries(projectIcons).map(([key, label]) => {
+            {matchingIcons.map(([key, label]) => {
               const Icon = icons[key];
               return (
                 <button
@@ -2552,6 +2633,9 @@ function ProjectModal({ project, onClose, onSaved, onDeleted }) {
               );
             })}
           </div>
+          {matchingIcons.length === 0 && (
+            <p className="form-note" role="status">{t("Keine passenden Symbole gefunden.")}</p>
+          )}
         </fieldset>
         {project && (
           <label className="checkbox-label">

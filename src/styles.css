@@ -259,14 +259,14 @@ fieldset:disabled {
 }
 .brand em {
   font-style: normal;
-  color: var(--primary);
+  color: #5550df;
   margin-left: 1px;
 }
 .brand-mark {
   display: flex;
   gap: 3px;
   align-items: flex-start;
-  background: var(--primary);
+  background: #5550df;
   width: 30px;
   height: 30px;
   padding: 8px 6px;
@@ -275,7 +275,7 @@ fieldset:disabled {
 }
 .brand-mark i {
   width: 4px;
-  background: var(--surface, #fff);
+  background: #fff;
   border-radius: 2px;
   height: 15px;
 }
@@ -3159,8 +3159,7 @@ fieldset:disabled {
 :root[data-theme="dark"] .project-icon {
   --project-icon-text: color-mix(in srgb, var(--project-color) 50%, #fff);
 }
-:root[data-theme="dark"] .button.primary,
-:root[data-theme="dark"] .brand-mark {
+:root[data-theme="dark"] .button.primary {
   background: var(--solid-accent);
 }
 :root[data-theme="dark"] .button.primary:hover {
@@ -3234,6 +3233,9 @@ fieldset:disabled {
   width: 32px;
   height: 32px;
   object-fit: contain;
+  filter: none;
+  mix-blend-mode: normal;
+  opacity: 1;
 }
 .brand-custom-name {
   font-size: 18px;
@@ -3286,7 +3288,12 @@ fieldset:disabled {
 }
 .icon-picker {
   flex-wrap: wrap;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 3px;
+  scrollbar-gutter: stable;
 }
+.project-icon-search { margin: 12px 0 8px; }
 
 /* Prominent task actions and direct bucket naming. */
 .toolbar-right .primary {
