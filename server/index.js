@@ -21,6 +21,7 @@ import express from "express";
 import { integrationAuth, installTokenRoutes } from "./integration-api.js";
 import helmet from "helmet";
 import session from "express-session";
+import { SESSION_DURATION_MS } from "./session-policy.js";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import { Op, UniqueConstraintError } from "sequelize";
@@ -119,7 +120,7 @@ app.use(
       httpOnly: true,
       sameSite: "lax",
       secure: origin.startsWith("https:"),
-      maxAge: 86400000,
+      maxAge: SESSION_DURATION_MS,
     },
   }),
 );

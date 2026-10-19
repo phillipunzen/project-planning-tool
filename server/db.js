@@ -1,5 +1,6 @@
 import { Sequelize, DataTypes as D } from "sequelize";
 import session from "express-session";
+import { SESSION_DURATION_MS } from "./session-policy.js";
 export const db = new Sequelize(
   process.env.DATABASE_NAME || "projektwerk",
   process.env.DATABASE_USER || "projektwerk",
@@ -157,7 +158,8 @@ export class DatabaseSessionStore extends session.Store {
     SessionRow.upsert({
       sid,
       data: JSON.stringify(data),
-      expiresAt: data.cookie.expires || new Date(Date.now() + 86400000),
+      expiresAt:
+        data.cookie.expires || new Date(Date.now() + SESSION_DURATION_MS),
     })
       .then(() => cb?.())
       .catch(cb);
@@ -169,7 +171,10 @@ export class DatabaseSessionStore extends session.Store {
   }
   touch(sid, data, cb) {
     SessionRow.update(
-      { expiresAt: data.cookie.expires || new Date(Date.now() + 86400000) },
+      {
+        expiresAt:
+          data.cookie.expires || new Date(Date.now() + SESSION_DURATION_MS),
+      },
       { where: { sid } },
     )
       .then(() => cb?.())

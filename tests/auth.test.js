@@ -11,7 +11,8 @@ process.env.NODE_ENV = "test";
 process.env.DATABASE_NAME = "projektwerk_test";
 process.env.UPLOAD_DIR = "artifacts/auth-uploads";
 const { app } = await import("../server/index.js");
-const { db, Setting, User, Membership } = await import("../server/db.js");
+const { db, Setting, User, Membership, SessionRow } =
+  await import("../server/db.js");
 const { ldapIdentity } = await import("../server/security.js");
 await db.sync({ force: true });
 await Setting.create({ key: "installation", value: "{}" });
@@ -44,9 +45,29 @@ function client() {
       } catch {
         data = text;
       }
-      return { status: r.status, data, location: r.headers.get("location") };
+      return {
+        status: r.status,
+        data,
+        location: r.headers.get("location"),
+        headers: r.headers,
+      };
     },
   };
+}
+async function assertNinetyDaySession(result) {
+  const cookie = result.headers.get("set-cookie");
+  assert.match(cookie, /HttpOnly/);
+  assert.match(cookie, /SameSite=Lax/);
+  const expires = Date.parse(cookie.match(/Expires=([^;]+)/)[1]);
+  const remaining = expires - Date.now();
+  const ninetyDays = 90 * 24 * 60 * 60 * 1000;
+  assert(remaining > ninetyDays - 10000 && remaining <= ninetyDays);
+  const signedId = decodeURIComponent(cookie.split(";")[0].split("=")[1]);
+  const sid = signedId.slice(2, signedId.lastIndexOf("."));
+  const stored = await SessionRow.findByPk(sid);
+  assert(stored);
+  assert(Math.abs(stored.expiresAt.getTime() - expires) < 1000);
+  return sid;
 }
 const issuer = "https://idp.test.example";
 const { privateKey, publicKey } = generateKeyPairSync("rsa", {
@@ -129,17 +150,20 @@ const admin = client();
 let pid, invite;
 await test("OIDC authorization code flow and directory identity", async (t) => {
   await t.test("prepare local admin and configured OIDC provider", async () => {
-    assert.equal(
-      (
-        await admin.call("/setup", "POST", {
-          name: "Admin",
-          email: "local@test.example",
-          password: "AdminPassword123!",
-          sample: false,
-        })
-      ).status,
-      201,
-    );
+    const setup = await admin.call("/setup", "POST", {
+      name: "Admin",
+      email: "local@test.example",
+      password: "AdminPassword123!",
+      sample: false,
+    });
+    assert.equal(setup.status, 201);
+    await assertNinetyDaySession(setup);
+    const login = await admin.call("/auth/login", "POST", {
+      email: "local@test.example",
+      password: "AdminPassword123!",
+    });
+    assert.equal(login.status, 200);
+    await assertNinetyDaySession(login);
     pid = (await admin.call("/projects", "POST", { name: "Identity Test" }))
       .data.id;
     invite = "a".repeat(64); // Legacy query parameters never affect sign-in or membership.
@@ -210,6 +234,7 @@ await test("OIDC authorization code flow and directory identity", async (t) => {
       const c = client(),
         result = await finish(c, await start(c));
       assert.equal(result.location, "/");
+      await assertNinetyDaySession(result);
       const me = await c.call("/me");
       assert.equal(me.status, 200);
       assert.equal(me.data.authType, "oidc");
@@ -224,6 +249,20 @@ await test("OIDC authorization code flow and directory identity", async (t) => {
       });
       assert.equal(created.status, 201);
       assert.equal((await c.call("/admin/users")).status, 403);
+    },
+  );
+  await t.test(
+    "expired sessions are rejected even when the browser still sends the cookie",
+    async () => {
+      const c = client();
+      const result = await finish(c, await start(c));
+      assert.equal(result.location, "/");
+      const sid = await assertNinetyDaySession(result);
+      await SessionRow.update(
+        { expiresAt: new Date(Date.now() - 1000) },
+        { where: { sid } },
+      );
+      assert.equal((await c.call("/me")).status, 401);
     },
   );
   await t.test(
@@ -421,16 +460,13 @@ await test("OIDC authorization code flow and directory identity", async (t) => {
           200,
         );
         const directoryUser = client();
-        assert.equal(
-          (
-            await directoryUser.call("/auth/login", "POST", {
-              method: "ldap",
-              email: "user",
-              password: "user-password",
-            })
-          ).status,
-          200,
-        );
+        const directoryLogin = await directoryUser.call("/auth/login", "POST", {
+          method: "ldap",
+          email: "user",
+          password: "user-password",
+        });
+        assert.equal(directoryLogin.status, 200);
+        await assertNinetyDaySession(directoryLogin);
         const directoryProfile = (await directoryUser.call("/me")).data;
         assert.equal(directoryProfile.authType, "ldap");
         assert.equal(directoryProfile.role, "user");

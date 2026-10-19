@@ -200,6 +200,8 @@ Der Verbindungstest prüft beim OIDC-Anbieter die Discovery; bei LDAP TLS-Verbin
 
 ## Daten und Betrieb
 
+Anmeldungen über SSO, Active Directory und lokale Konten bleiben nach erfolgreicher Anmeldung 90 Tage gültig. Die Frist beginnt bei der Anmeldung; normale Nutzung verlängert sie nicht automatisch. Nach einem Update auf diese Sitzungsdauer einmal abmelden und erneut anmelden, damit das bisherige Browser-Cookie durch ein Cookie mit 90 Tagen Gültigkeit ersetzt wird. Abmelden oder das Deaktivieren eines Kontos beendet den Zugriff weiterhin sofort.
+
 Anhänge bleiben im Compose-Volume `uploads`. Bei externer MariaDB liegen Projekte, Benutzer und Sitzungen auf dem konfigurierten Datenbankserver; beim optionalen lokalen Modus speichert das Volume `mariadb-data` die Datenbank dauerhaft. Sitzungen liegen in MariaDB; ein Containerneustart verliert weder Projekte noch Sitzungen. Der `SESSION_SECRET` dient zusätzlich zur Verschlüsselung der Anbieter-Secrets. Den Schlüssel sichern und nicht ohne eine geplante Migration austauschen. Ein geänderter Schlüssel macht bestehende Sitzungen und verschlüsselte Anmeldedaten unbrauchbar.
 
 ```bash
