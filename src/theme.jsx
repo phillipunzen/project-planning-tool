@@ -105,6 +105,7 @@ export function ThemeProvider({ children }) {
     <ThemeContext.Provider
       value={{
         preference,
+        resolved,
         changePreference,
         design,
         changeDesign: (value) => setDesign(validDesign(value)),
@@ -188,8 +189,10 @@ export function DesignChoices({ value, onChange, disabled }) {
     </fieldset>
   );
 }
-export function ColorThemeChoices({ value, onChange, disabled }) {
+export function ColorThemeChoices({ value, onChange, disabled, design }) {
   useLanguage();
+  const appearance = useColorTheme();
+  const selectedDesign = design || appearance.design;
   return (
     <div
       className="color-theme-choices"
@@ -207,7 +210,11 @@ export function ColorThemeChoices({ value, onChange, disabled }) {
         >
           <span
             className="theme-swatch"
-            style={{ background: theme.color }}
+            style={{
+              background: id === "indigo" && selectedDesign === "glass"
+                ? appearance.resolved === "dark" ? "#40d6ff" : "#3c4fff"
+                : theme.color,
+            }}
             aria-hidden="true"
           />
           <span>{t(theme.label)}</span>

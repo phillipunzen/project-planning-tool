@@ -44,9 +44,29 @@ try {
   for (const theme of ["light", "dark"]) {
     await page.getByLabel("Darstellung", { exact: true }).selectOption(theme);
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    const buttonContrast = await page.locator(".toolbar-right .primary").evaluate(button => {
+      const accent = getComputedStyle(document.documentElement).getPropertyValue("--solid-accent").trim();
+      const base = accent.slice(1).match(/../g).map(value => parseInt(value, 16));
+      const ink = getComputedStyle(button).color.match(/[\d.]+/g).slice(0, 3).map(Number);
+      const luminance = rgb => rgb.map(value => value / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4).reduce((total, value, index) => total + value * [.2126, .7152, .0722][index], 0);
+      const contrast = rgb => (Math.max(luminance(rgb), luminance(ink)) + .05) / (Math.min(luminance(rgb), luminance(ink)) + .05);
+      return Math.min(contrast(base), contrast(base.map(value => .92 * value + .08 * 255)));
+    });
+    assert(buttonContrast >= 4.5, `Primary button text contrast too low: ${buttonContrast}`);
     await page.screenshot({ path: `artifacts/glass-desktop-${theme}.png`, fullPage: true, animations: "disabled" });
     await noOverflow(page);
   }
+  await profile(page);
+  await expect(page.getByRole("radio", { name: "Designstandard", exact: true })).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("radio", { name: "Violett", exact: true }).click();
+  await save(page);
+  await expect(page.locator("html")).toHaveAttribute("data-color-theme", "violet");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-color-theme", "violet");
+  await profile(page);
+  await page.getByRole("radio", { name: "Designstandard", exact: true }).click();
+  await save(page);
+  await expect(page.locator("html")).toHaveAttribute("data-color-theme", "indigo");
   await profile(page);
   await expect(page.getByRole("radio", { name: "Liquid Glass", exact: true })).toBeChecked();
   await page.getByRole("radio", { name: "Klassisch", exact: true }).check();
@@ -114,6 +134,30 @@ try {
   assert(await page.evaluate(() => matchMedia("(prefers-reduced-transparency: reduce)").matches));
   assert.equal(await page.locator(".sidebar").evaluate(node => getComputedStyle(node).backdropFilter), "none");
   await devtools.detach();
+  await page.emulateMedia({ forcedColors: "none", reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 1512, height: 900 });
+  const tallBoard = await (await desktop.request.get(base + `/api/boards/${boardId}`)).json();
+  for (let index = 0; index < 8; index++) {
+    const created = await desktop.request.post(base + `/api/boards/${boardId}/cards`, {
+      headers,
+      data: { title: `Langes Board ${index + 1}`, columnId: tallBoard.columns[0].id },
+    });
+    assert.equal(created.status(), 201);
+  }
+  await page.reload();
+  await expect(page.locator(".task-card")).toHaveCount(14);
+  const height = await page.evaluate(() => ({
+    document: document.documentElement.scrollHeight,
+    canvas: document.documentElement.getBoundingClientRect().height,
+    viewport: innerHeight,
+  }));
+  assert(height.document > height.viewport * 2);
+  assert(height.canvas >= height.document - 1);
+  for (const mode of ["light", "dark"]) {
+    await page.getByLabel("Darstellung", { exact: true }).selectOption(mode);
+    await page.screenshot({ path: `artifacts/glass-long-board-${mode}.png`, fullPage: true, animations: "disabled" });
+  }
+  await noOverflow(page);
   assert.deepEqual(errors, []);
   await other.close(); await mobile.close();
   console.log("PASS: Glass default, Classic option, save/cancel, cross-device profile, independent colour theme, EN/DE, light/dark, mobile navigation/task editor, tablet, forced colours, unchanged task data.");

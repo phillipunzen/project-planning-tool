@@ -1,5 +1,13 @@
 export const colorThemes = {
   indigo: {
+    label: "Designstandard",
+    color: "#5550df",
+    soft: "#eeedff",
+    dark: "#b4aaff",
+    darkSoft: "#302a50",
+    solid: "#6558dc",
+  },
+  violet: {
     label: "Violett",
     color: "#5550df",
     soft: "#eeedff",

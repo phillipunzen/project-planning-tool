@@ -22,6 +22,7 @@
   document.documentElement.dataset.theme = theme;
   const colors = {
     indigo: "#5550df",
+    violet: "#5550df",
     ocean: "#185abd",
     forest: "#146c4a",
     sunset: "#a43b12",
@@ -37,7 +38,9 @@
   document.documentElement.dataset.colorTheme = colorTheme;
   document.documentElement.style.setProperty(
     "--pwa-accent",
-    colors[colorTheme],
+    colorTheme === "indigo" && design === "glass"
+      ? theme === "dark" ? "#40d6ff" : "#3c4fff"
+      : colors[colorTheme],
   );
   document
     .querySelector('meta[name="theme-color"]')

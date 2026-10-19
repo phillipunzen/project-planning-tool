@@ -192,7 +192,7 @@ try {
     await t.test(
       "colour preferences persist per user and reject unknown themes and privilege changes",
       async () => {
-        for (const theme of ["indigo", "ocean", "forest", "sunset", "rose"]) {
+        for (const theme of ["indigo", "violet", "ocean", "forest", "sunset", "rose"]) {
           const saved = await editor.call("/me", "PATCH", { theme });
           assert.equal(saved.status, 200);
           assert.equal(saved.data.theme, theme);

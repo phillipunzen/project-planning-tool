@@ -26,7 +26,7 @@
 
 /* All material and layout changes are scoped: Classic keeps its original CSS. */
 :root[data-design="glass"] {
-  --page: #edf3ff;
+  --page: #f2f5ff;
   --surface: #f9fbff;
   --surface-soft: #edf2fc;
   --surface-translucent: #f6f9ffc9;
@@ -37,40 +37,67 @@
   --muted: #526580;
   --border: #cddbf0;
   --border-neutral: #ccd9ed;
-  --glass-panel: #f8fbffb8;
+  --glass-panel: #f8fbff8f;
   --glass-edge: #ffffffdb;
-  --glass-shadow: 0 12px 36px #34578c0e, inset 0 1px 0 #fff;
-  --glass-card: #fcfdfff2;
+  --glass-shadow: 0 12px 36px #547dc119, inset 0 1px 1px #fff, inset 0 -1px 0 #bdd5ff52;
+  --glass-card: #ffffffdf;
+  --glass-sheen: linear-gradient(135deg, #ffffff80, #ffffff08 45%, #d7eaff26);
+  --glass-button-ink: #fff;
+  --glass-selected-bg: var(--primary-soft);
+  --glass-selected-ink: var(--primary);
   --glass-blur: blur(22px) saturate(145%);
-  background: #edf3ff;
-  background-image: radial-gradient(ellipse at 12% 4%, #c4dfffa6, transparent 50%), radial-gradient(ellipse at 90% 24%, #dcd6ffa8, transparent 45%), radial-gradient(ellipse at 65% 90%, #cce6ffa6, transparent 50%);
-  background-attachment: fixed;
+  background: #f2f5ff;
+  background-image: linear-gradient(145deg, #d9d7ff80, transparent 35%, #cee9ff66 65%, transparent), radial-gradient(ellipse at 15% 55%, #c3e5ffb3, transparent 45%), radial-gradient(ellipse at 94% 15%, #d8dcffc9, transparent 45%), radial-gradient(ellipse at 65% 95%, #c6bfff80, transparent 45%);
+  min-height: 100%;
+  background-attachment: scroll;
+  background-repeat: no-repeat;
 }
 :root[data-design="glass"][data-theme="dark"] {
-  --page: #101d31;
-  --surface: #1c2c43;
-  --surface-soft: #22344e;
-  --surface-translucent: #172b43d9;
+  --page: #0c1626;
+  --surface: #1b2a3f;
+  --surface-soft: #23364d;
+  --surface-translucent: #18273dd9;
   --text: #eef4ff;
   --text-strong: #eef4ff;
   --text-normal: #c6d6ed;
   --text-muted: #b0c3dd;
   --muted: #b0c3dd;
-  --border: #3c526e;
-  --border-neutral: #3c526e;
-  --glass-panel: #1c3049c9;
-  --glass-edge: #9ebae74a;
-  --glass-shadow: 0 14px 40px #030b1924, inset 0 1px 0 #d8e7ff30;
-  --glass-card: #233650f5;
-  background-color: #101d31;
-  background-image: radial-gradient(ellipse at 15% 0%, #294c8466, transparent 50%), radial-gradient(ellipse at 90% 25%, #39387855, transparent 45%), radial-gradient(ellipse at 60% 90%, #1b517944, transparent 50%);
+  --border: #425c7d;
+  --border-neutral: #425c7d;
+  --glass-panel: #18283dbd;
+  --glass-edge: #8dcaff61;
+  --glass-shadow: 0 16px 40px #01081345, 0 0 20px #338bff0b, inset 0 1px 1px #c3e5ff59, inset 0 -1px 0 #5793cf21;
+  --glass-card: #24354be8;
+  --glass-sheen: linear-gradient(135deg, #accdff1f, #ffffff00 50%, #2d7aaf0a);
+  background-color: #0c1626;
+  background-image: radial-gradient(ellipse at 7% 4%, #3663be85, transparent 45%), radial-gradient(ellipse at 93% 15%, #293e985c, transparent 45%), radial-gradient(ellipse at 65% 95%, #236db080, transparent 48%);
+}
+/* The default palette follows the two approved concepts; explicit accents stay independent. */
+:root[data-design="glass"][data-color-theme="indigo"] {
+  --primary: #3041df;
+  --primary-soft: #e7eaff;
+  --solid-accent: #3c4fff;
+  --text-accent: #3041df;
+  --border-accent: #7584ff;
+  --glass-selected-bg: linear-gradient(135deg, #ffffffc2, #ced6ffb3);
+  --glass-selected-ink: #2637b9;
+}
+:root[data-design="glass"][data-color-theme="indigo"][data-theme="dark"] {
+  --primary: #77dcff;
+  --primary-soft: #153e59;
+  --solid-accent: #40d6ff;
+  --text-accent: #8ce3ff;
+  --border-accent: #40d6ff;
+  --glass-button-ink: #06263b;
+  --glass-selected-bg: linear-gradient(110deg, #38a9da91, #28559b9c);
+  --glass-selected-ink: #f0fbff;
 }
 :root[data-design="glass"] .sidebar,
 :root[data-design="glass"] .topbar,
 :root[data-design="glass"] .board-tabs,
 :root[data-design="glass"] .modal,
 :root[data-design="glass"] .glass-mobile-nav {
-  background: var(--glass-panel);
+  background: var(--glass-sheen), var(--glass-panel);
   border: 1px solid var(--glass-edge);
   box-shadow: var(--glass-shadow);
   -webkit-backdrop-filter: var(--glass-blur);
@@ -86,7 +113,7 @@
 :root[data-design="glass"] .board-tabs { padding: 8px 14px; border-radius: 22px; gap: 14px; }
 :root[data-design="glass"] .view-tabs { gap: 5px; }
 :root[data-design="glass"] .view-tabs button { border: 1px solid transparent; border-radius: 16px; padding: 11px 15px; min-height: 44px; }
-:root[data-design="glass"] .view-tabs .active { background: var(--surface); border-color: var(--glass-edge); color: var(--primary); box-shadow: 0 3px 12px #273e7010, inset 0 1px 0 #ffffff70; }
+:root[data-design="glass"] .view-tabs .active { background: var(--glass-selected-bg); border-color: var(--glass-edge); color: var(--glass-selected-ink); box-shadow: 0 3px 12px #273e7010, inset 0 1px 0 #ffffff70; }
 :root[data-design="glass"] .board-toolbar { padding: 20px 3px; }
 :root[data-design="glass"] .search-field,
 :root[data-design="glass"] .filter-select,
@@ -96,10 +123,10 @@
 :root[data-design="glass"] .filter-select select { background: transparent; }
 :root[data-design="glass"] .button { border-radius: 15px; min-height: 42px; }
 :root[data-design="glass"] .button.primary {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--solid-accent, #5550df) 88%, white), var(--solid-accent, #5550df));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--solid-accent, #5550df) 92%, white), var(--solid-accent, #5550df));
   border: 1px solid color-mix(in srgb, var(--solid-accent, #5550df) 65%, white);
   box-shadow: inset 0 1px 2px #ffffff75, 0 4px 12px color-mix(in srgb, var(--solid-accent, #5550df) 22%, transparent);
-  color: #fff;
+  color: var(--glass-button-ink);
 }
 :root[data-design="glass"] .button.secondary { background: var(--glass-panel); border-color: var(--glass-edge); box-shadow: inset 0 1px 0 #ffffff35; }
 :root[data-design="glass"] .main-nav button,
@@ -107,19 +134,22 @@
 :root[data-design="glass"] .settings-nav { border: 1px solid transparent; border-radius: 14px; min-height: 44px; }
 :root[data-design="glass"] .main-nav .selected,
 :root[data-design="glass"] .project-nav .selected,
-:root[data-design="glass"] .settings-nav.selected { background: var(--primary-soft); border-color: var(--glass-edge); box-shadow: inset 0 1px 0 #ffffff50, 0 3px 10px #28477c0a; }
+:root[data-design="glass"] .settings-nav.selected { background: var(--glass-selected-bg); color: var(--glass-selected-ink); border-color: var(--glass-edge); box-shadow: inset 0 1px 0 #ffffff8c, 0 3px 14px #2893df24; }
 :root[data-design="glass"] .workspace-note { background: transparent; border: 1px solid var(--glass-edge); border-radius: 14px; }
 :root[data-design="glass"] .kanban-board { padding: 0 0 22px; gap: 16px; }
-:root[data-design="glass"] .kanban-column { background: var(--glass-panel); border: 1px solid var(--glass-edge); border-radius: 22px; padding: 16px 12px 12px; box-shadow: var(--glass-shadow); min-height: 330px; }
+:root[data-design="glass"] .kanban-column { background: var(--glass-sheen), var(--glass-panel); border: 1px solid var(--glass-edge); border-radius: 22px; padding: 16px 12px 12px; box-shadow: var(--glass-shadow); min-height: 330px; }
 :root[data-design="glass"] .kanban-column.drop-target { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft), var(--glass-shadow); }
 :root[data-design="glass"] .column-heading { margin-bottom: 16px; }
 :root[data-design="glass"] .column-heading h3 { font-size: 14px; }
 :root[data-design="glass"] .column-count { border-radius: 20px; padding: 1px 6px; }
 :root[data-design="glass"] .column-cards { gap: 12px; }
-:root[data-design="glass"] .task-card { background: var(--glass-card); border: 1px solid var(--glass-edge); border-radius: 17px; padding: 16px 14px 13px; box-shadow: 0 4px 12px #244a7b09, inset 0 1px 0 #ffffff40; }
+:root[data-design="glass"] .task-card { background: var(--glass-sheen), var(--glass-card); border: 1px solid var(--glass-edge); border-radius: 17px; padding: 16px 14px 13px; box-shadow: 0 4px 12px #244a7b09, inset 0 1px 0 #ffffff40; }
 :root[data-design="glass"] .task-card:hover { border-color: var(--border-accent, #9893ed); box-shadow: 0 7px 20px #244a7b16; }
 :root[data-design="glass"] .task-card.dragging { box-shadow: 0 18px 40px #152d5740; }
 :root[data-design="glass"] .card-title { font-size: 14px; font-weight: 650; }
+:root[data-design="glass"] .card-progress > div { height: 5px; }
+:root[data-design="glass"] .card-progress > span { font-size: 10px; }
+:root[data-design="glass"] .task-card[data-progress="100"] .card-progress i { background: var(--solid-success, #35bf83); }
 :root[data-design="glass"] .label-chip,
 :root[data-design="glass"] .priority { border-radius: 20px; }
 :root[data-design="glass"] .column-add { border-radius: 14px; min-height: 44px; background: var(--surface-soft); border: 1px solid var(--glass-edge); margin-top: 12px; }
@@ -158,7 +188,7 @@
   :root[data-design="glass"] .kanban-board { padding-bottom: 14px; }
   :root[data-design="glass"] .glass-mobile-nav { display: flex; position: fixed; bottom: max(12px, env(safe-area-inset-bottom)); left: 12px; right: 12px; z-index: 25; padding: 6px; gap: 4px; border-radius: 25px; }
   :root[data-design="glass"] .glass-mobile-nav button { flex: 1; min-width: 0; min-height: 52px; border-radius: 20px; flex-direction: column; gap: 3px; font-size: 10px; color: var(--text-normal); }
-  :root[data-design="glass"] .glass-mobile-nav [aria-current="page"] { color: var(--primary); background: var(--primary-soft); box-shadow: inset 0 1px 0 #ffffff40; }
+  :root[data-design="glass"] .glass-mobile-nav [aria-current="page"] { color: var(--glass-selected-ink); background: var(--glass-selected-bg); box-shadow: inset 0 1px 0 #ffffff40; }
   :root[data-design="glass"] .toast { bottom: calc(95px + env(safe-area-inset-bottom)); }
   :root[data-design="glass"] .modal { padding: 22px 18px; }
   :root[data-design="glass"] .modal-header-container { background: var(--glass-card); }

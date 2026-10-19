@@ -1431,7 +1431,7 @@ function ProfileModal({ user, onClose, onSaved, onApi }) {
           {t("Dein Design gilt auf allen Geräten. Farbtheme und Hell-/Dunkelmodus kannst du unabhängig davon wählen.")}
         </p>
         <label>{t("Farbtheme")}</label>
-        <ColorThemeChoices value={theme} onChange={setTheme} disabled={busy} />
+        <ColorThemeChoices value={theme} onChange={setTheme} disabled={busy} design={design} />
         <p className="form-note">
           {t(
             "Das Farbtheme wird in deinem Profil gespeichert und gilt auf allen Geräten. Hell und Dunkel bleiben separat wählbar.",
@@ -1730,6 +1730,7 @@ function TaskCard({
   return (
     <article
       className={`task-card ${dragging ? "dragging" : ""}`}
+      data-progress={card.progress || 0}
       style={style}
       {...dragProps}
     >

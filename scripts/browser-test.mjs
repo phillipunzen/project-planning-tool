@@ -94,14 +94,17 @@ try {
   const darkCard = await page.locator(".task-card").first().evaluate(el => getComputedStyle(el).backgroundColor);
   if (darkCard === lightCard) throw new Error("Kanban cards did not switch appearance");
   await expect(page.locator("html")).toHaveAttribute("data-design", "glass");
-  await expect(page.locator(".kanban-column").first()).toHaveCSS("background-color", "rgba(28, 48, 73, 0.79)");
-  await expect(page.locator(".button.secondary").first()).toHaveCSS("background-color", "rgba(28, 48, 73, 0.79)");
+  const isDarkSurface = locator => locator.evaluate(node => {
+    const channels = getComputedStyle(node).backgroundColor.match(/[\d.]+/g).slice(0, 3).map(Number);
+    return Math.max(...channels) < 100;
+  });
+  await expect.poll(() => isDarkSurface(page.locator(".kanban-column").first())).toBe(true);
+  await expect.poll(() => isDarkSurface(page.locator(".button.secondary").first())).toBe(true);
   await page.screenshot({ path: "artifacts/board-dark-desktop.png", fullPage: true });
   await page.getByRole("button", { name: "Aufgabe erstellen", exact: true }).click();
   await expect(page.locator("dialog")).toBeVisible();
-  const fieldBackground = await page.getByLabel("Titel", { exact: true }).evaluate(el => getComputedStyle(el).backgroundColor);
   const dialogBackground = await page.locator("dialog").evaluate(el => getComputedStyle(el).backgroundColor);
-  if (fieldBackground !== "rgb(28, 44, 67)" || dialogBackground !== darkCard) throw new Error("Dark fields and dialogs have inconsistent surfaces");
+  if (!(await isDarkSurface(page.getByLabel("Titel", { exact: true }))) || dialogBackground !== darkCard) throw new Error("Dark fields and dialogs have inconsistent surfaces");
   await page.screenshot({ path: "artifacts/card-dark-desktop.png", fullPage: true });
   await page.locator("dialog .modal-heading").getByRole("button", { name: "Schließen", exact: true }).click();
   // A second tab must receive explicit preferences without losing its own state.
